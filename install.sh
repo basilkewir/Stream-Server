@@ -10,7 +10,7 @@
 set -e
 
 APP_DIR="/var/www/hybridstream"
-PHP_VERSION="8.2"
+PHP_VERSION="8.3"
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -53,7 +53,7 @@ apt-get update -y
 apt-get upgrade -y
 
 # --- [2/10] PHP ---
-echo -e "${YELLOW}[2/10] Installing PHP 8.2 + extensions...${NC}"
+echo -e "${YELLOW}[2/10] Installing PHP 8.3 + extensions...${NC}"
 apt-get install -y software-properties-common
 add-apt-repository -y ppa:ondrej/php
 apt-get update -y
@@ -62,8 +62,7 @@ apt-get install -y \
     php${PHP_VERSION}-common php${PHP_VERSION}-mysql php${PHP_VERSION}-sqlite3 \
     php${PHP_VERSION}-mbstring php${PHP_VERSION}-xml php${PHP_VERSION}-curl \
     php${PHP_VERSION}-gd php${PHP_VERSION}-zip php${PHP_VERSION}-bcmath \
-    php${PHP_VERSION}-redis php${PHP_VERSION}-pcntl php${PHP_VERSION}-posix \
-    php${PHP_VERSION}-intl
+    php${PHP_VERSION}-redis php${PHP_VERSION}-intl
 
 # --- [3/10] FFmpeg ---
 echo -e "${YELLOW}[3/10] Installing FFmpeg...${NC}"
