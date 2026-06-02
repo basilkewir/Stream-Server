@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  flussonic:
+    image: flussonic/flussonic:24.02
+    container_name: hybridstream-flussonic
+    restart: unless-stopped
+    ports:
+      - "1935:1935"       # RTMP ingest
+      - "8080:8080"       # HTTP API / Admin UI
+      - "8082:80"         # HLS/DASH/MSE/Screenshots (container:80 -> host:8082)
+      - "554:554"         # RTSP
+      - "10000:10000/udp" # SRT
+    volumes:
+      - ./docker/flussonic/flussonic.conf:/etc/flussonic/flussonic.conf:ro
+      - flussonic_data:/var/lib/flussonic
+    environment:
+      - FLUSSONIC_LICENSE=${FLUSSONIC_LICENSE:-free}
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  redis:
+    image: redis:7-alpine
+    container_name: hybridstream-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  flussonic_data:
