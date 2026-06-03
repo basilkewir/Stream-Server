@@ -38,11 +38,9 @@ class StreamHealthMonitor
             return ['status' => 'vod', 'action' => 'switched_to_vod'];
         }
 
-        // Still offline — ensure FFmpeg is running as failover
+        // Still offline — ensure FFmpeg is still running (VOD or black screen)
         if (!$isAlive && !$wasLive) {
-            $hasVod = $channel->vodPlaylistItems()->where('status', 'active')->exists();
-
-            if ($hasVod && !$this->isFfmpegRunning($channel)) {
+            if (!$this->isFfmpegRunning($channel)) {
                 $this->startVodPlayback($channel);
                 return ['status' => 'vod', 'action' => 'restarted_vod'];
             }
@@ -108,10 +106,8 @@ class StreamHealthMonitor
             'message'           => "Live stream lost for channel {$channel->name}, switching to VOD failover",
         ]);
 
-        $hasVod = $channel->vodPlaylistItems()->where('status', 'active')->exists();
-        if ($hasVod) {
-            $this->startVodPlayback($channel);
-        }
+        // Always start playback - VOD if items exist, black screen if not
+        $this->startVodPlayback($channel);
 
         event(new StreamStatusChanged($channel, false, true, 'vod_failover'));
         Log::info("Channel {$channel->id} switched to VOD failover");

@@ -114,15 +114,19 @@ class FFmpegCommandBuilder
 
     public function buildBlackScreenCommand(Channel $channel): string
     {
-        $text      = addslashes($channel->name ?? 'Stream Offline');
+        $text      = $this->escapeFFmpegText($channel->name ?? 'Stream Offline');
+        $appName   = $this->escapeFFmpegText(config('app.name', 'HybridStream'));
         $outputUrl = $this->buildOutputUrl($channel);
         $font      = $this->getFontPath();
 
         return "ffmpeg -re -f lavfi -i color=c=black:s=1920x1080:r=25 -f lavfi -i anullsrc=r=44100:cl=stereo" .
-            " -vf \"drawtext=fontfile='{$font}':text='{$text}':fontcolor=white:fontsize=48:x=(w-tw)/2:y=(h-th)/2\"" .
+            " -filter_complex" .
+            " \"drawtext=fontfile='{$font}':text='{$appName}':fontcolor=white:fontsize=36:x=(w-tw)/2:y=(h-th)/2-60:alpha=0.6," .
+            "drawtext=fontfile='{$font}':text='{$text}':fontcolor=white:fontsize=52:x=(w-tw)/2:y=(h-th)/2," .
+            "drawtext=fontfile='{$font}':text='Stream Temporarily Offline':fontcolor=0xFFAAAA:fontsize=28:x=(w-tw)/2:y=(h-th)/2+70\"" .
             " -c:v libx264 -preset ultrafast -b:v 500k -tune zerolatency" .
             " -c:a aac -b:a 32k -ar 44100 -ac 2" .
-            " -shortest {$this->buildOutputFormat($channel)} \"{$outputUrl}\"";
+            " {$this->buildOutputFormat($channel)} \"{$outputUrl}\"";
     }
 
     private function buildOutputUrl(Channel $channel): string
