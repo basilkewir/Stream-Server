@@ -78,8 +78,8 @@ class FFmpegCommandBuilder
         }
 
         if ($overlay && $overlay->enabled) {
-            [$currentVideo, $overlayFilters] = $this->buildAllOverlayFilters(
-                $overlay, $currentVideo, $inputs, $inputIndex
+            [$currentVideo, $currentAudio, $overlayFilters] = $this->buildAllOverlayFilters(
+                $overlay, $currentVideo, $currentAudio, $inputs, $inputIndex
             );
             foreach ($overlayFilters as $f) {
                 $filterComplex[] = $f;
@@ -101,7 +101,9 @@ class FFmpegCommandBuilder
             $cmd .= " -filter_complex \"{$filterStr}\"";
             $cmd .= " -map \"[{$currentVideo}]\" -map \"[{$currentAudio}]\"";
         } else {
-            $cmd .= " -map 0:v -map 0:a";
+            // No filter - map video and audio directly
+            $isYtSplit = count($inputs) > count($concatParts);
+            $cmd .= " -map 0:v -map " . ($isYtSplit ? '1:a' : '0:a');
         }
 
         $cmd .= " -c:v libx264 -preset veryfast -b:v 2000k -maxrate 2500k -bufsize 4000k";
@@ -154,7 +156,7 @@ class FFmpegCommandBuilder
         };
     }
 
-    private function buildAllOverlayFilters($overlay, string $currentVideo, array &$inputs, int &$inputIndex): array
+    private function buildAllOverlayFilters($overlay, string $currentVideo, string $currentAudio, array &$inputs, int &$inputIndex): array
     {
         $filters = [];
         $font    = $this->getFontPath();
@@ -226,7 +228,10 @@ class FFmpegCommandBuilder
             $currentVideo = $nextVideo;
         }
 
-        return [$currentVideo, $filters];
+        // Pass audio through filter graph so it can be mapped by label
+        $filters[] = "[{$currentAudio}]anull[aout]";
+
+        return [$currentVideo, 'aout', $filters];
     }
 
     private function buildXfadeChain(int $total): array
