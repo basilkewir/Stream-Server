@@ -49,25 +49,21 @@ class VodPlaylistService
     {
         $maxOrder = $channel->vodPlaylistItems()->max('order') ?? 0;
 
-        // Try to get duration via yt-dlp
-        $duration = $this->probeYoutubeDuration($url);
-
-        // Try to get title via yt-dlp if not provided
-        if (!$title) {
-            $title = $this->probeYoutubeTitle($url) ?? 'YouTube Video';
-        }
+        $youtubeService = app(YouTubeService::class);
+        $meta = $youtubeService->fetchMetadata($url);
 
         return VodPlaylistItem::create([
             'channel_id'       => $channel->id,
             'type'             => 'youtube',
-            'title'            => $title,
+            'title'            => $title ?: ($meta['title'] ?? 'YouTube Video'),
             'file_path_or_url' => $url,
-            'duration_sec'     => $duration,
+            'duration_sec'     => $meta['duration_sec'] ?? null,
             'file_size_bytes'  => 0,
             'order'            => $maxOrder + 1,
             'status'           => 'active',
             'loop_count'       => 1,
             'transition'       => 'cut',
+            'metadata_json'    => $meta ?: null,
         ]);
     }
 
@@ -228,28 +224,6 @@ class VodPlaylistService
             $cmd = "ffprobe -v error -show_entries format=duration -of csv=p=0 \"{$filePath}\"";
             $output = shell_exec($cmd);
             return $output ? (float) trim($output) : null;
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
-    private function probeYoutubeDuration(string $url): ?float
-    {
-        try {
-            $cmd = 'yt-dlp --no-playlist --print "%(duration)s" ' . escapeshellarg($url) . ' 2>/dev/null';
-            $output = trim((string) shell_exec($cmd));
-            return is_numeric($output) ? (float) $output : null;
-        } catch (\Exception $e) {
-            return null;
-        }
-    }
-
-    private function probeYoutubeTitle(string $url): ?string
-    {
-        try {
-            $cmd = 'yt-dlp --no-playlist --print "%(title)s" ' . escapeshellarg($url) . ' 2>/dev/null';
-            $output = trim((string) shell_exec($cmd));
-            return !empty($output) ? $output : null;
         } catch (\Exception $e) {
             return null;
         }

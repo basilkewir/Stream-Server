@@ -20,6 +20,7 @@ class VodPlaylistItem extends Model
         'loop_count',
         'transition',
         'status',
+        'metadata_json',
     ];
 
     protected function casts(): array
@@ -31,6 +32,7 @@ class VodPlaylistItem extends Model
             'loop_count' => 'integer',
             'order' => 'integer',
             'scheduled_at' => 'datetime',
+            'metadata_json' => 'array',
         ];
     }
 

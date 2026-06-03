@@ -464,19 +464,43 @@ function copyToClipboard(text, label) {
             <div v-else class="space-y-1">
               <div v-for="item in vod_items" :key="item.id" class="border rounded-lg" :class="item.status === 'paused' ? 'opacity-50 bg-gray-50' : ''">
                 <!-- Item Row -->
-                <div class="flex items-center gap-3 p-3">
-                  <span class="text-xs text-gray-400 w-6 text-center">{{ item.order }}</span>
-                  <span class="px-1.5 py-0.5 text-xs rounded font-mono" :class="item.type === 'youtube' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'">{{ item.type === 'youtube' ? 'YT' : 'FILE' }}</span>
+                <div class="flex items-start gap-3 p-3">
+                  <!-- YouTube thumbnail -->
+                  <div class="shrink-0">
+                    <img v-if="item.type === 'youtube' && item.metadata_json?.thumbnail"
+                      :src="item.metadata_json.thumbnail"
+                      class="w-24 h-14 object-cover rounded bg-gray-800" />
+                    <div v-else class="w-24 h-14 bg-gray-200 rounded flex items-center justify-center">
+                      <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.867v6.266a1 1 0 01-1.447.902L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+                    </div>
+                  </div>
+                  <span class="text-xs text-gray-400 w-5 text-center mt-1">{{ item.order }}</span>
                   <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-gray-900 truncate">{{ item.title || 'Untitled' }}</p>
-                    <p class="text-xs text-gray-500">
-                      {{ formatDuration((item.duration_override || item.duration_sec || 0) * (item.loop_count || 1)) }}
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <span class="px-1.5 py-0.5 text-xs rounded font-mono shrink-0"
+                        :class="item.type === 'youtube' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'">
+                        {{ item.type === 'youtube' ? 'YT' : 'FILE' }}
+                      </span>
+                      <p class="text-sm font-medium text-gray-900 truncate">{{ item.title || 'Untitled' }}</p>
+                    </div>
+                    <!-- YouTube meta details -->
+                    <div v-if="item.type === 'youtube' && item.metadata_json" class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                      <span v-if="item.metadata_json.channel">&#x1F4FA; {{ item.metadata_json.channel }}</span>
+                      <span v-if="item.metadata_json.upload_date">&#x1F4C5; {{ item.metadata_json.upload_date }}</span>
+                      <span v-if="item.metadata_json.view_count">&#x1F441; {{ Number(item.metadata_json.view_count).toLocaleString() }} views</span>
+                      <span v-if="item.metadata_json.resolution">&#x1F4F9; {{ item.metadata_json.resolution }}</span>
+                      <span v-if="item.metadata_json.fps">{{ item.metadata_json.fps }}fps</span>
+                      <a v-if="item.metadata_json.webpage_url" :href="item.metadata_json.webpage_url" target="_blank" class="text-indigo-500 hover:underline">Open &#x2197;</a>
+                    </div>
+                    <!-- File/common meta -->
+                    <p class="text-xs text-gray-500 mt-0.5">
+                      <span>&#x23F1; {{ formatDuration((item.duration_override || item.duration_sec || 0) * (item.loop_count || 1)) }}</span>
                       <span v-if="item.loop_count > 1"> &middot; x{{ item.loop_count }}</span>
                       <span v-if="item.scheduled_at"> &middot; {{ item.scheduled_at }}</span>
                       <span v-if="item.transition !== 'cut'"> &middot; {{ item.transition }}</span>
                     </p>
                   </div>
-                  <div class="flex items-center gap-2">
+                  <div class="flex items-center gap-2 shrink-0">
                     <button @click="toggleItemStatus(item)" class="text-xs" :class="item.status === 'active' ? 'text-green-600' : 'text-gray-400'" :title="item.status === 'active' ? 'Active - click to pause' : 'Paused - click to activate'">
                       {{ item.status === 'active' ? '&#9654;' : '&#9646;&#9646;' }}
                     </button>
