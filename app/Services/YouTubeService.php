@@ -194,6 +194,11 @@ class YouTubeService
             }
         }
 
+        $plainVersion = trim(shell_exec('yt-dlp --version 2>&1') ?: '');
+        if (!empty($plainVersion) && is_numeric(explode('.', $plainVersion)[0] ?? null)) {
+            return 'yt-dlp';
+        }
+
         return null;
     }
 
@@ -210,6 +215,11 @@ class YouTubeService
             if (!empty($path) && is_executable($path)) {
                 return $path;
             }
+        }
+
+        $plainVersion = trim(shell_exec('youtube-dl --version 2>&1') ?: '');
+        if (!empty($plainVersion) && is_numeric(explode('.', $plainVersion)[0] ?? null)) {
+            return 'youtube-dl';
         }
 
         return null;
