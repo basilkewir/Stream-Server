@@ -277,11 +277,9 @@ class FFmpegCommandBuilder
     private function resolveYoutubeUrl(string $url): ?string
     {
         $resolved = $this->youtubeService->resolveStreamUrl($url);
-
-        if ($resolved === $url) {
-            return null;
-        }
-
+        
+        // Always return the resolved URL, even if it's the original URL
+        // Flussonic can handle YouTube URLs directly in many cases
         return $resolved;
     }
 

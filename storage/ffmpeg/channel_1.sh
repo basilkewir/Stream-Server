@@ -1,0 +1,2 @@
+#!/bin/bash
+ffmpeg -re -stream_loop -1 -i "https://www.youtube.com/watch?v=dQw4w9WgXcQ" -i "C:\Users\FT_Basil\Stream-Server\storage\app/public\overlays/1/Pnm7msfdIAZKET2vZOORmSSEChvj5kZ3qjHXMEDL.png" -filter_complex "[1:v]scale=150:-1[logo_scaled];[0:v][logo_scaled]overlay=10:10[after_logo];[0:a]anull[aout]" -map "[after_logo]" -map "[aout]" -c:v libx264 -preset veryfast -b:v 2000k -maxrate 2500k -bufsize 4000k -c:a aac -b:a 128k -ar 44100 -ac 2 -g 60 -keyint_min 60 -sc_threshold 0 -f flv "rtmp://127.0.0.1:1935/static/ffd004f2-e145-45d7-9ca4-e569f38fa94a"

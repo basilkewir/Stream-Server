@@ -6,6 +6,7 @@ use App\Models\Channel;
 use App\Models\StreamHealthLog;
 use App\Events\StreamStatusChanged;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class StreamHealthMonitor
 {
@@ -121,6 +122,12 @@ class StreamHealthMonitor
     {
         // Reload with relations needed for FFmpeg command
         $channel->load(['overlaySetting', 'vodPlaylistItems']);
+        
+        // Try Flussonic direct VOD playlist first if we have YouTube items
+        if ($this->tryFlussonicVodPlaylist($channel)) {
+            Log::info("Channel {$channel->id} using Flussonic direct VOD playlist.");
+            return;
+        }
 
         $cmd = $this->ffmpeg->buildVodWithOverlayCommand($channel);
 
@@ -137,6 +144,11 @@ class StreamHealthMonitor
         }
 
         // Write command to a temp script so nohup can run it cleanly
+        $ffmpegDir = storage_path('ffmpeg');
+        if (!is_dir($ffmpegDir)) {
+            mkdir($ffmpegDir, 0755, true);
+        }
+        
         $scriptPath = storage_path("ffmpeg/channel_{$channel->id}.sh");
         $logPath    = storage_path("ffmpeg/channel_{$channel->id}.log");
 
@@ -153,6 +165,60 @@ class StreamHealthMonitor
         } else {
             Log::error("Failed to start VOD FFmpeg for channel {$channel->id}");
         }
+    }
+
+    private function tryFlussonicVodPlaylist(Channel $channel): bool
+    {
+        $activeItems = $channel->vodPlaylistItems
+            ->where('status', 'active')
+            ->sortBy('order');
+
+        if ($activeItems->isEmpty()) {
+            return false;
+        }
+
+        // Try to create a Flussonic playlist with multiple sources
+        $sources = [];
+        
+        foreach ($activeItems as $item) {
+            if ($item->type === 'youtube') {
+                $streamUrl = $this->youtubeService->resolveStreamUrl($item->file_path_or_url);
+                if ($streamUrl && $streamUrl !== $item->file_path_or_url) {
+                    // Successfully resolved to direct stream URL
+                    $sources[] = $streamUrl;
+                } else {
+                    // Use original YouTube URL as fallback
+                    $sources[] = $item->file_path_or_url;
+                }
+            } elseif ($item->type === 'upload') {
+                $path = $item->file_path_or_url;
+                if (Storage::disk('public')->exists($path)) {
+                    $fullPath = Storage::disk('public')->url($path);
+                    $sources[] = $fullPath;
+                }
+            }
+        }
+
+        if (empty($sources)) {
+            return false;
+        }
+
+        // For now, use the first source. In the future, we could create a proper Flussonic playlist
+        $primarySource = $sources[0];
+        
+        $success = $this->flussonic->pushVodToStream($channel->stream_key, $primarySource);
+        
+        if ($success) {
+            $channel->update([
+                'failover_active' => true,
+                'failover_ffmpeg_pid' => null,
+            ]);
+            Log::info("Channel {$channel->id}: Flussonic is now pulling VOD: {$primarySource}");
+        } else {
+            Log::error("Channel {$channel->id}: Flussonic VOD push failed for: {$primarySource}");
+        }
+
+        return $success;
     }
 
     private function tryFlussonicYoutubeFallback(Channel $channel): bool
