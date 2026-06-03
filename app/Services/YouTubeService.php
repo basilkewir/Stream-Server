@@ -34,14 +34,21 @@ class YouTubeService
         $videoId = $this->parseUrl($url);
         if (!$videoId) return [];
 
-        // Try yt-dlp first (preferred for server environments)
+        // Try YouTube Data API v3 first (fast, no system deps, gives accurate duration)
+        if (config('services.youtube.api_key')) {
+            $apiResult = $this->fetchViaYouTubeApi($videoId);
+            if (!empty($apiResult)) {
+                return $apiResult;
+            }
+        }
+
+        // Try yt-dlp (richest metadata source)
         try {
-            // Use full path and better error handling for server environment
             $ytdlpPath = $this->findYtDlpPath();
             if ($ytdlpPath) {
                 $cmd = "timeout 30 {$ytdlpPath} --no-playlist --dump-json --no-warnings " . escapeshellarg($url) . ' 2>/dev/null';
                 $output = shell_exec($cmd);
-                
+
                 if (!empty($output)) {
                     $data = json_decode(trim($output), true);
                     if ($data && isset($data['title'])) {
@@ -78,7 +85,7 @@ class YouTubeService
             if ($youtubeDlPath) {
                 $cmd = "timeout 30 {$youtubeDlPath} --no-playlist --dump-json --no-warnings " . escapeshellarg($url) . ' 2>/dev/null';
                 $output = shell_exec($cmd);
-                
+
                 if (!empty($output)) {
                     $data = json_decode(trim($output), true);
                     if ($data && isset($data['title'])) {
@@ -109,7 +116,7 @@ class YouTubeService
             \Log::warning('youtube-dl metadata extraction failed: ' . $e->getMessage());
         }
 
-        // Enhanced fallback with YouTube oEmbed API
+        // Enhanced fallback with YouTube oEmbed API + page scraping
         return $this->enhancedFallbackMetadata($videoId, $url);
     }
 
@@ -238,6 +245,9 @@ class YouTubeService
                 'path' => null,
                 'version' => null,
             ],
+            'youtube_api' => [
+                'configured' => !empty(config('services.youtube.api_key')),
+            ],
             'flussonic' => [
                 'running' => false,
                 'accessible' => false,
@@ -282,6 +292,78 @@ class YouTubeService
         $status['permissions']['web_user_can_execute'] = $canExecute;
 
         return $status;
+    }
+
+    private function fetchViaYouTubeApi(string $videoId): array
+    {
+        try {
+            $apiKey = config('services.youtube.api_key');
+            if (empty($apiKey)) return [];
+
+            $apiUrl = 'https://www.googleapis.com/youtube/v3/videos' .
+                '?id=' . urlencode($videoId) .
+                '&part=snippet,contentDetails,statistics' .
+                '&key=' . urlencode($apiKey);
+
+            $ctx = stream_context_create(['http' => ['timeout' => 5]]);
+            $response = @file_get_contents($apiUrl, false, $ctx);
+
+            if (!$response) return [];
+
+            $data = json_decode($response, true);
+            if (empty($data['items'])) return [];
+
+            $item = $data['items'][0];
+            $snippet        = $item['snippet']        ?? [];
+            $contentDetails = $item['contentDetails'] ?? [];
+            $statistics     = $item['statistics']     ?? [];
+
+            $durationSec = $this->parseIso8601Duration(
+                $contentDetails['duration'] ?? 'PT0S'
+            );
+
+            $publishedAt = isset($snippet['publishedAt'])
+                ? \Carbon\Carbon::parse($snippet['publishedAt'])->toDateString()
+                : null;
+
+            $thumbnail = isset($snippet['thumbnails']['medium']['url'])
+                ? $snippet['thumbnails']['medium']['url']
+                : (isset($snippet['thumbnails']['default']['url'])
+                    ? $snippet['thumbnails']['default']['url']
+                    : "https://img.youtube.com/vi/{$videoId}/mqdefault.jpg");
+
+            return [
+                'video_id'      => $videoId,
+                'title'         => $snippet['title'] ?? null,
+                'channel'       => $snippet['channelTitle'] ?? null,
+                'duration_sec'  => $durationSec,
+                'view_count'    => isset($statistics['viewCount']) ? (int) $statistics['viewCount'] : null,
+                'like_count'    => isset($statistics['likeCount']) ? (int) $statistics['likeCount'] : null,
+                'upload_date'   => $publishedAt,
+                'description'   => isset($snippet['description'])
+                    ? mb_substr($snippet['description'], 0, 300)
+                    : null,
+                'thumbnail'     => $thumbnail,
+                'webpage_url'   => "https://www.youtube.com/watch?v={$videoId}",
+                'resolution'    => null,
+                'fps'           => null,
+            ];
+        } catch (\Exception $e) {
+            \Log::warning('YouTube Data API v3 fetch failed: ' . $e->getMessage());
+            return [];
+        }
+    }
+
+    private function parseIso8601Duration(string $isoDuration): float
+    {
+        if (preg_match('/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/', $isoDuration, $m)) {
+            $hours   = (int) ($m[1] ?? 0);
+            $minutes = (int) ($m[2] ?? 0);
+            $seconds = (int) ($m[3] ?? 0);
+            return ($hours * 3600) + ($minutes * 60) + $seconds;
+        }
+
+        return 0;
     }
 
     private function enhancedFallbackMetadata(string $videoId, string $url): array

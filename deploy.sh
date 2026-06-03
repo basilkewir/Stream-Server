@@ -9,6 +9,29 @@ APP_DIR="/var/www/hybridstream"
 TMP_DIR="/tmp/hybridstream"
 
 echo "=== HybridStream Deployment with YouTube Integration ==="
+
+# Check if YOUTUBE_API_KEY is already set
+CURRENT_KEY=$(grep "^YOUTUBE_API_KEY=" "$APP_DIR/.env" | cut -d= -f2- | tr -d '"')
+if [ -z "$CURRENT_KEY" ]; then
+    echo ""
+    echo "YouTube Data API v3 key not set."
+    echo "Get one at: https://console.cloud.google.com/apis/credentials"
+    echo -n "Enter YouTube API key (press Enter to skip): "
+    read -r YOUTUBE_API_KEY
+    if [ -n "$YOUTUBE_API_KEY" ]; then
+        if grep -q "^YOUTUBE_API_KEY=" "$APP_DIR/.env"; then
+            sed -i "s/YOUTUBE_API_KEY=.*/YOUTUBE_API_KEY=\"${YOUTUBE_API_KEY}\"/" "$APP_DIR/.env"
+        else
+            echo "YOUTUBE_API_KEY=\"${YOUTUBE_API_KEY}\"" >> "$APP_DIR/.env"
+        fi
+        echo "YouTube API key saved."
+    else
+        echo "Skipped. YouTube metadata will rely on yt-dlp fallback."
+    fi
+else
+    echo "YouTube API key already configured."
+fi
+
 echo "Fetching latest code..."
 if [ -d "$TMP_DIR/.git" ]; then
     git -C "$TMP_DIR" fetch origin main

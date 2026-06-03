@@ -73,4 +73,25 @@ if %ERRORLEVEL% == 0 (
 
 echo.
 echo Installation complete! Your YouTube videos should now show proper duration and metadata.
+echo.
+echo Alternative: YouTube Data API v3
+echo   Instead of yt-dlp, you can use Google's YouTube Data API:
+echo   1. Get an API key at https://console.cloud.google.com/apis/credentials
+echo   2. Add to your .env file: YOUTUBE_API_KEY=your-key-here
+echo   3. No local tools needed - works via simple HTTP requests
+echo.
+echo Would you like to set a YouTube API key now? (y/n)
+set /p SET_KEY=""
+if /i "%SET_KEY%"=="y" (
+    echo Enter your YouTube Data API v3 key:
+    set /p API_KEY=""
+    if exist .env (
+        powershell -Command "(Get-Content .env) -replace 'YOUTUBE_API_KEY=.*', 'YOUTUBE_API_KEY=%API_KEY%' | Set-Content .env"
+        echo Key saved to .env file.
+    ) else (
+        echo YOUTUBE_API_KEY=%API_KEY%> .env_api_key.txt
+        echo Key saved to .env_api_key.txt - copy this line into your .env file.
+    )
+)
+echo.
 pause

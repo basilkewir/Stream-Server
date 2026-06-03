@@ -43,6 +43,12 @@ echo -e "${YELLOW}Enter a database name [hybridstream]:${NC}"
 read -r DB_NAME
 DB_NAME=${DB_NAME:-hybridstream}
 
+echo -e "${YELLOW}Enter YouTube Data API v3 key (optional - get from https://console.cloud.google.com/apis/credentials):${NC}"
+read -r YOUTUBE_API_KEY
+if [ -z "$YOUTUBE_API_KEY" ]; then
+    echo -e "${YELLOW}No API key entered. YouTube duration/metadata will rely on yt-dlp fallback.${NC}"
+fi
+
 echo ""
 echo -e "${GREEN}Installing to ${APP_DIR} for ${SERVER_IP}${NC}"
 sleep 2
@@ -141,6 +147,7 @@ sed -i "s/DB_DATABASE=.*/DB_DATABASE=${DB_NAME}/" .env
 sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${MYSQL_PASS}/" .env
 sed -i "s/STREAM_HOST=.*/STREAM_HOST=\"${SERVER_IP}\"/" .env
 sed -i "s/FLUSSONIC_HOST=.*/FLUSSONIC_HOST=\"${SERVER_IP}\"/" .env
+sed -i "s/YOUTUBE_API_KEY=.*/YOUTUBE_API_KEY=\"${YOUTUBE_API_KEY}\"/" .env
 
 # Update config cache
 php artisan config:clear
@@ -319,6 +326,13 @@ echo "  6001  Reverb WebSocket"
 echo ""
 echo "Push from encoder:  rtmp://${SERVER_IP}:1935/{stream_key}"
 echo "Play HLS:           http://${SERVER_IP}:8082/{stream_key}/index.m3u8"
+echo ""
+if [ -n "$YOUTUBE_API_KEY" ]; then
+    echo -e "${GREEN}YouTube Data API v3: Configured${NC}"
+else
+    echo -e "${YELLOW}YouTube Data API v3: Not configured (yt-dlp fallback will be used)${NC}"
+    echo "  Set it later in .env: YOUTUBE_API_KEY=your-key"
+fi
 echo ""
 echo -e "${YELLOW}CHANGE the default admin password immediately!${NC}"
 echo -e "${YELLOW}Visit http://${SERVER_IP}:8080 to check Flussonic status${NC}"
