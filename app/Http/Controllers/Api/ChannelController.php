@@ -140,7 +140,21 @@ class ChannelController extends Controller
         return response()->json(['logo_url' => $url]);
     }
 
-    public function getOverlay(Channel $channel)
+    public function refreshYoutubeMetadata(Channel $channel, $vodItemId)
+    {
+        $this->authorize('update', $channel);
+
+        $item = $channel->vodPlaylistItems()->where('type', 'youtube')->findOrFail($vodItemId);
+        $youtubeService = app(YouTubeService::class);
+        
+        $success = $youtubeService->refreshMetadata($item);
+        
+        if ($success) {
+            return response()->json(['item' => $item->fresh(), 'message' => 'Metadata refreshed']);
+        } else {
+            return response()->json(['error' => 'Failed to refresh metadata. Ensure yt-dlp is installed.'], 422);
+        }
+    }
     {
         $this->authorize('view', $channel);
 
@@ -150,5 +164,43 @@ class ChannelController extends Controller
             'settings' => $overlayService->getSettings($channel),
             'preview' => $overlayService->buildOverlayPreviewFilters($channel),
         ]);
+    }
+
+    public function systemStatus()
+    {
+        $youtubeService = app(YouTubeService::class);
+        $status = $youtubeService->getSystemStatus();
+        
+        return response()->json([
+            'system_status' => $status,
+            'recommendations' => $this->getRecommendations($status),
+        ]);
+    }
+
+    private function getRecommendations(array $status): array
+    {
+        $recommendations = [];
+        
+        if (!$status['yt_dlp']['available'] && !$status['youtube_dl']['available']) {
+            $recommendations[] = 'Install yt-dlp for YouTube metadata extraction: sudo pip3 install yt-dlp';
+        }
+        
+        if (!$status['flussonic']['running']) {
+            $recommendations[] = 'Flussonic service is not running. Check: sudo systemctl status flussonic';
+        }
+        
+        if (!$status['flussonic']['accessible']) {
+            $recommendations[] = 'Flussonic is not accessible on port 8090. Check firewall and service configuration.';
+        }
+        
+        if (!$status['permissions']['web_user_can_execute']) {
+            $recommendations[] = 'Web server user cannot execute YouTube tools. Check PATH and permissions.';
+        }
+        
+        if (empty($recommendations)) {
+            $recommendations[] = 'System is properly configured for YouTube integration!';
+        }
+        
+        return $recommendations;
     }
 }

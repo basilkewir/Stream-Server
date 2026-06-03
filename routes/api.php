@@ -22,9 +22,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/channels/{channel}/vod/youtube', [ApiChannelController::class, 'addYoutube']);
     Route::delete('/channels/{channel}/vod/{vodItemId}', [ApiChannelController::class, 'deleteVod']);
     Route::post('/channels/{channel}/vod/reorder', [ApiChannelController::class, 'reorderVod']);
+    Route::post('/channels/{channel}/vod/{vodItemId}/refresh-metadata', [ApiChannelController::class, 'refreshYoutubeMetadata']);
     Route::put('/channels/{channel}/overlay', [ApiChannelController::class, 'updateOverlay']);
     Route::get('/channels/{channel}/overlay', [ApiChannelController::class, 'getOverlay']);
     Route::post('/channels/{channel}/overlay/logo', [ApiChannelController::class, 'uploadLogo']);
+    Route::get('/system/status', [ApiChannelController::class, 'systemStatus']);
 
     Route::get('/admin/subscriptions', [ApiAdminController::class, 'subscriptions']);
     Route::post('/admin/subscriptions', [ApiAdminController::class, 'createSubscription']);

@@ -45,6 +45,7 @@ Route::middleware([
         Route::post('/channels/{channel}/vod/upload', [ChannelController::class, 'uploadVod'])->name('vod.upload');
         Route::post('/channels/{channel}/vod/youtube', [ChannelController::class, 'addYoutube'])->name('vod.youtube');
         Route::delete('/channels/{channel}/vod/{vodItemId}', [ChannelController::class, 'deleteVod'])->name('vod.delete');
+        Route::post('/channels/{channel}/vod/{vodItemId}/refresh-metadata', [ChannelController::class, 'refreshYoutubeMetadata'])->name('vod.refresh');
         Route::post('/channels/{channel}/vod/reorder', [ChannelController::class, 'reorderVod'])->name('vod.reorder');
         Route::put('/channels/{channel}/vod/{vodItemId}', [ChannelController::class, 'updateVodItem'])->name('vod.update');
         Route::post('/channels/{channel}/vod/bulk', [ChannelController::class, 'bulkUpdateVod'])->name('vod.bulk');

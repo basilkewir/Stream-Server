@@ -233,7 +233,21 @@ class ChannelController extends Controller
         return response()->json(['status' => 'ok', 'settings' => $channel->fresh()->only(['playlist_mode', 'playlist_loop', 'playlist_fill_action'])]);
     }
 
-    public function playlistStats(Channel $channel)
+    public function refreshYoutubeMetadata(Channel $channel, $vodItemId)
+    {
+        $this->authorize('update', $channel);
+
+        $item = $channel->vodPlaylistItems()->where('type', 'youtube')->findOrFail($vodItemId);
+        $youtubeService = app(YouTubeService::class);
+        
+        $success = $youtubeService->refreshMetadata($item);
+        
+        if ($success) {
+            return back()->with('success', 'YouTube metadata refreshed successfully.');
+        } else {
+            return back()->withErrors(['error' => 'Failed to refresh YouTube metadata. Please ensure yt-dlp is installed.']);
+        }
+    }
     {
         $this->authorize('view', $channel);
 

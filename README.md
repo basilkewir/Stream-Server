@@ -7,6 +7,61 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Troubleshooting
+
+### YouTube Videos Show 0 Duration
+
+If YouTube videos in your playlists show 0 seconds duration and missing metadata:
+
+**Ubuntu Server with Flussonic Integration:**
+
+1. **Deploy with YouTube tools** (automated setup):
+   ```bash
+   # Run the deployment script which includes YouTube tools installation
+   sudo bash /var/www/hybridstream/deploy.sh
+   ```
+   
+   Or install manually:
+   ```bash
+   sudo apt update
+   sudo apt install python3-pip
+   sudo pip3 install yt-dlp
+   # Also install for web server user
+   sudo -u www-data pip3 install --user yt-dlp
+   ```
+
+2. **Verify Flussonic integration**:
+   ```bash
+   # Check Flussonic is running
+   sudo systemctl status flussonic
+   
+   # Verify port 8090 is accessible
+   curl -I http://localhost:8090
+   ```
+
+3. **Refresh existing videos**:
+   ```bash
+   php artisan youtube:refresh-metadata
+   ```
+
+4. **Check system status** (via API):
+   ```bash
+   curl -H "Authorization: Bearer YOUR_TOKEN" http://your-server/api/system/status
+   ```
+
+5. **Test the fix**:
+   - Add a new YouTube video to verify metadata is extracted
+   - Check that duration shows correctly
+   - Verify Flussonic can process the stream at `http://your-server:8090`
+
+**Troubleshooting:**
+- Check Laravel logs: `tail -f storage/logs/laravel.log`
+- Check Flussonic logs: `sudo journalctl -u flussonic -f`
+- Verify web server permissions: `sudo chown -R www-data:www-data storage/`
+- Test yt-dlp manually: `yt-dlp --version`
+
+The deployment script automatically sets up YouTube metadata extraction with proper integration for your Ubuntu server running Flussonic on port 8090.
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
