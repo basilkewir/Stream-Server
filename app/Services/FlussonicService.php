@@ -25,12 +25,12 @@ class FlussonicService
 
     public function getStreams(): array
     {
-        return $this->get('/api/v3/streams')['streams'] ?? [];
+        return $this->get('/flussonic/api/v3/streams')['streams'] ?? [];
     }
 
     public function getStream(string $name): ?array
     {
-        return $this->get("/api/v3/streams/{$name}");
+        return $this->get("/flussonic/api/v3/streams/{$name}");
     }
 
     public function isStreamAlive(string $name): bool
@@ -74,7 +74,7 @@ class FlussonicService
         try {
             $response = Http::withBasicAuth($this->login, $this->password)
                 ->asJson()
-                ->put("{$this->baseUrl}/api/v3/streams/{$name}", [
+                ->put("{$this->baseUrl}/flussonic/api/v3/streams/{$name}", [
                     'src' => $vodUrl,
                 ]);
 
@@ -89,7 +89,7 @@ class FlussonicService
     {
         try {
             $response = Http::withBasicAuth($this->login, $this->password)
-                ->delete("{$this->baseUrl}/api/v3/streams/{$name}");
+                ->delete("{$this->baseUrl}/flussonic/api/v3/streams/{$name}");
 
             return $response->successful();
         } catch (\Exception $e) {
@@ -102,7 +102,7 @@ class FlussonicService
     {
         try {
             $response = Http::withBasicAuth($this->login, $this->password)
-                ->post("{$this->baseUrl}/api/v3/streams/{$name}/restart");
+                ->post("{$this->baseUrl}/flussonic/api/v3/streams/{$name}/restart");
 
             return $response->successful();
         } catch (\Exception $e) {
@@ -113,7 +113,7 @@ class FlussonicService
 
     public function getServerStats(): ?array
     {
-        $response = $this->get('/api/v3/server');
+        $response = $this->get('/flussonic/api/v3/server');
         if (!$response) return null;
 
         return [
@@ -147,7 +147,7 @@ class FlussonicService
         try {
             $response = Http::withBasicAuth($this->login, $this->password)
                 ->timeout(3)
-                ->get("{$this->baseUrl}/api/v3/server");
+                ->get("{$this->baseUrl}/flussonic/api/v3/server");
 
             return $response->successful();
         } catch (\Exception $e) {

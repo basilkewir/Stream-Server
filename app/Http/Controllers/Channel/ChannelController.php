@@ -129,7 +129,7 @@ class ChannelController extends Controller
 
             \Illuminate\Support\Facades\Http::withBasicAuth($login, $password)
                 ->asJson()
-                ->put("http://{$host}:{$apiPort}/api/v3/streams/{$channel->stream_key}", [
+                ->post("http://{$host}:{$apiPort}/flussonic/api/v3/streams", [
                     'name' => $channel->stream_key,
                     'src'  => $ingestUrl,
                 ]);
