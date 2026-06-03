@@ -143,15 +143,16 @@ function handleLogoUpload() {
 
 const ingestUrl = computed(() => {
   const host = window.location.hostname
+  const port = window.location.port ? `:${window.location.port}` : ''
   const p = props.channel.ingest_protocol
-  const port = props.channel.ingest_port
+  const ingestPort = props.channel.ingest_port
   const key = props.channel.stream_key
   switch (p) {
-    case 'rtmp': return `rtmp://${host}:${port}/static/${key}`
-    case 'srt': return `srt://${host}:${port}?streamid=static/${key}`
-    case 'rtsp': return `rtsp://${host}:${port}/static/${key}`
-    case 'mpegts': return `udp://${host}:${port}`
-    default: return `rtmp://${host}:${port}/static/${key}`
+    case 'rtmp': return `rtmp://${host}:${ingestPort}/static/${key}`
+    case 'srt': return `srt://${host}:${ingestPort}?streamid=static/${key}`
+    case 'rtsp': return `rtsp://${host}:${ingestPort}/static/${key}`
+    case 'mpegts': return `udp://${host}:${ingestPort}`
+    default: return `rtmp://${host}:${ingestPort}/static/${key}`
   }
 })
 
@@ -165,6 +166,22 @@ const outputUrls = computed(() => {
     screenshot: `http://${host}/static/${key}/screenshot.jpg`,
   }
 })
+
+// Base URL for app assets (includes port)
+const appBaseUrl = `${window.location.protocol}//${window.location.host}`
+
+const fixStorageUrl = (url) => {
+  if (!url) return url
+  // Replace any origin mismatch with current host (includes port)
+  try {
+    const u = new URL(url)
+    u.host = window.location.host
+    u.protocol = window.location.protocol
+    return u.toString()
+  } catch {
+    return url
+  }
+}
 
 const formatDuration = (sec) => {
   if (!sec) return '0s'
@@ -587,7 +604,7 @@ function copyToClipboard(text, label) {
                 <div v-if="overlay_settings?.logo_url && overlayForm.enabled"
                   class="absolute"
                   :style="logoPreviewStyle">
-                  <img :src="overlay_settings.logo_url" :style="{width: overlayForm.logo_width + 'px'}" class="object-contain" />
+                  <img :src="fixStorageUrl(overlay_settings.logo_url)" :style="{width: overlayForm.logo_width + 'px'}" class="object-contain" />
                 </div>
                 <!-- Clock preview -->
                 <div v-if="overlayForm.show_clock && overlayForm.enabled"
@@ -629,7 +646,7 @@ function copyToClipboard(text, label) {
                 <!-- Logo -->
                 <div class="border rounded-lg p-4">
                   <h4 class="font-medium text-gray-900 mb-3">Logo</h4>
-                  <div v-if="overlay_settings?.logo_url" class="mb-2"><img :src="overlay_settings.logo_url" class="h-12 object-contain bg-gray-800 rounded p-1" /></div>
+                  <div v-if="overlay_settings?.logo_url" class="mb-2"><img :src="fixStorageUrl(overlay_settings.logo_url)" class="h-12 object-contain bg-gray-800 rounded p-1" /></div>
                   <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-xs text-gray-600">Position</label>
                       <select v-model="overlayForm.logo_position" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs">
