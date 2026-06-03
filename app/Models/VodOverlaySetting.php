@@ -23,6 +23,20 @@ class VodOverlaySetting extends Model
         'show_clock',
         'clock_position',
         'enabled',
+        'lower_third_title',
+        'lower_third_subtitle',
+        'lower_third_position',
+        'lower_third_bg_color',
+        'lower_third_text_color',
+        'lower_third_font_size',
+        'lower_third_duration',
+        'show_lower_third',
+        'crawl_text',
+        'crawl_speed',
+        'crawl_bg_color',
+        'crawl_text_color',
+        'crawl_font_size',
+        'show_crawl',
     ];
 
     protected function casts(): array
@@ -30,6 +44,8 @@ class VodOverlaySetting extends Model
         return [
             'enabled' => 'boolean',
             'show_clock' => 'boolean',
+            'show_lower_third' => 'boolean',
+            'show_crawl' => 'boolean',
         ];
     }
 

@@ -10,170 +10,225 @@ class FFmpegCommandBuilder
 {
     public function buildVodWithOverlayCommand(Channel $channel): string
     {
-        $overlay = $channel->overlaySetting;
-        $filterComplex = [];
-        $inputs = [];
+        $overlay  = $channel->overlaySetting;
+        $mode     = $channel->playlist_mode ?? 'sequential';
+        $query    = $channel->vodPlaylistItems()->where('status', 'active');
 
-        $mode = $channel->playlist_mode ?? 'sequential';
+        $items = $mode === 'scheduled'
+            ? $query->orderBy('scheduled_at')->orderBy('order')->get()
+            : $query->orderBy('order')->get();
 
-        $query = $channel->vodPlaylistItems()->where('status', 'active');
-
-        if ($mode === 'scheduled') {
-            $playlistItems = $query->orderBy('scheduled_at')->orderBy('order')->get();
-        } else {
-            $playlistItems = $query->orderBy('order')->get();
-        }
-
-        if ($playlistItems->isEmpty()) {
+        if ($items->isEmpty()) {
             return $this->buildBlackScreenCommand($channel);
         }
 
-        $inputIndex = 0;
-        $concatParts = [];
-        $useXfade = false;
+        $inputs       = [];
+        $concatParts  = [];
+        $inputIndex   = 0;
+        $useXfade     = false;
 
-        foreach ($playlistItems as $item) {
-            $inputPath = $this->resolvePlaylistItemPath($item);
-            if (!$inputPath) continue;
+        foreach ($items as $item) {
+            $path = $this->resolvePlaylistItemPath($item);
+            if (!$path) continue;
 
-            $loopCount = max(1, (int)($item->loop_count ?? 1));
-
-            for ($l = 0; $l < $loopCount; $l++) {
-                $inputs[] = $inputPath;
-                $concatParts[] = "[{$inputIndex}:v]";
+            $loops = max(1, (int)($item->loop_count ?? 1));
+            for ($l = 0; $l < $loops; $l++) {
+                $inputs[]      = $path;
+                $concatParts[] = "[{$inputIndex}:v][{$inputIndex}:a]";
                 $inputIndex++;
             }
 
-            if ($item->transition !== 'cut' && $item->transition !== null) {
+            if (!in_array($item->transition, ['cut', null], true)) {
                 $useXfade = true;
             }
         }
 
-        if (empty($concatParts)) {
+        if (empty($inputs)) {
             return $this->buildBlackScreenCommand($channel);
         }
 
-        $totalInputs = count($concatParts);
-        $currentVideo = null;
+        $filterComplex = [];
+        $currentVideo  = '0:v';
+        $currentAudio  = '0:a';
+        $total         = count($inputs);
 
-        if ($totalInputs === 1) {
-            $currentVideo = '0:v';
-        } elseif ($useXfade && $totalInputs > 1) {
-            $filterComplex[] = $this->buildXfadeChain($totalInputs, $concatParts);
-            $currentVideo = 'xfade_out';
-        } else {
-            $concatFilter = implode('', $concatParts) . "concat=n={$totalInputs}:v=1:a=0";
-            $filterComplex[] = $concatFilter;
-            $currentVideo = 'concat_out';
+        if ($total > 1) {
+            if ($useXfade) {
+                [$currentVideo, $currentAudio, $xfadeFilter] = $this->buildXfadeChain($total);
+                $filterComplex[] = $xfadeFilter;
+            } else {
+                $concatIn = implode('', $concatParts);
+                $filterComplex[] = "{$concatIn}concat=n={$total}:v=1:a=1[vconcat][aconcat]";
+                $currentVideo = 'vconcat';
+                $currentAudio = 'aconcat';
+            }
         }
 
         if ($overlay && $overlay->enabled) {
-            $filterComplex[] = $this->buildOverlayFilters($overlay, $currentVideo, $inputs, $inputIndex);
-            $currentVideo = 'overlay_out';
+            [$currentVideo, $overlayFilters] = $this->buildAllOverlayFilters(
+                $overlay, $currentVideo, $inputs, $inputIndex
+            );
+            foreach ($overlayFilters as $f) {
+                $filterComplex[] = $f;
+            }
         }
 
-        $filterComplexStr = implode(';', array_filter($filterComplex));
-        $host = config('flussonic.host', '127.0.0.1');
-        $rtmpPort = config('flussonic.rtmp_port', 1935);
+        $filterStr = implode(';', array_filter($filterComplex));
+        $outputUrl = $this->buildOutputUrl($channel);
 
         $cmd = 'ffmpeg -re';
         if ($channel->playlist_loop) {
             $cmd .= ' -stream_loop -1';
         }
-        $cmd .= ' ';
-        foreach ($inputs as $i => $input) {
-            $cmd .= "-i \"{$input}\" ";
+        foreach ($inputs as $input) {
+            $cmd .= " -i \"{$input}\"";
         }
 
-        if ($filterComplexStr) {
-            $cmd .= "-filter_complex \"{$filterComplexStr}\" ";
+        if ($filterStr) {
+            $cmd .= " -filter_complex \"{$filterStr}\"";
+            $cmd .= " -map \"[{$currentVideo}]\" -map \"[{$currentAudio}]\"";
+        } else {
+            $cmd .= " -map 0:v -map 0:a";
         }
 
-        $cmd .= "-map \"[{$currentVideo}]\" ";
-
-        $cmd .= "-c:v libx264 -preset veryfast -b:v 2000k -maxrate 2500k -bufsize 4000k ";
-        $cmd .= "-c:a aac -b:a 128k -ar 44100 ";
-        $cmd .= "-g 60 -keyint_min 60 -sc_threshold 0 ";
-        $cmd .= "-f flv \"rtmp://{$host}:{$rtmpPort}/static/{$channel->stream_key}\"";
+        $cmd .= " -c:v libx264 -preset veryfast -b:v 2000k -maxrate 2500k -bufsize 4000k";
+        $cmd .= " -c:a aac -b:a 128k -ar 44100 -ac 2";
+        $cmd .= " -g 60 -keyint_min 60 -sc_threshold 0";
+        $cmd .= " {$this->buildOutputFormat($channel)} \"{$outputUrl}\"";
 
         return $cmd;
     }
 
     public function buildBlackScreenCommand(Channel $channel): string
     {
-        $host = config('flussonic.host', '127.0.0.1');
-        $rtmpPort = config('flussonic.rtmp_port', 1935);
-        $text = $channel->name ?? 'Stream Offline';
+        $text      = addslashes($channel->name ?? 'Stream Offline');
+        $outputUrl = $this->buildOutputUrl($channel);
+        $font      = $this->getFontPath();
 
-        return "ffmpeg -re -f lavfi -i color=c=black:s=1920x1080:d=1 " .
-            "-vf \"drawtext=fontfile={$this->getFontPath()}:text='{$text}':fontcolor=white:fontsize=48:x=(w-tw)/2:y=(h-th)/2," .
-            "loop=-1:size=1:start=0\" " .
-            "-c:v libx264 -preset ultrafast -b:v 500k " .
-            "-c:a anullsrc -b:a 32k -ar 44100 -ac 2 " .
-            "-f flv \"rtmp://{$host}:{$rtmpPort}/static/{$channel->stream_key}\"";
+        return "ffmpeg -re -f lavfi -i color=c=black:s=1920x1080:r=25 -f lavfi -i anullsrc=r=44100:cl=stereo" .
+            " -vf \"drawtext=fontfile='{$font}':text='{$text}':fontcolor=white:fontsize=48:x=(w-tw)/2:y=(h-th)/2\"" .
+            " -c:v libx264 -preset ultrafast -b:v 500k -tune zerolatency" .
+            " -c:a aac -b:a 32k -ar 44100 -ac 2" .
+            " -shortest {$this->buildOutputFormat($channel)} \"{$outputUrl}\"";
     }
 
-    private function buildXfadeChain(int $count, array $labels): string
+    private function buildOutputUrl(Channel $channel): string
     {
-        $parts = [];
-        $xfadeDuration = 0.5;
-        $lastOut = '';
+        $host    = config('flussonic.host', '127.0.0.1');
+        $key     = $channel->stream_key;
+        $protocol = $channel->ingest_protocol;
+        $port    = $channel->ingest_port;
 
-        foreach ($labels as $i => $label) {
-            if ($i === 0) {
-                $parts[] = "{$label}null[v0]";
-                $lastOut = 'v0';
-            } else {
-                $nextOut = "v{$i}";
-                $parts[] = "[{$lastOut}]{$label}xfade=transition=fade:duration={$xfadeDuration}:offset=0[{$nextOut}]";
-                $lastOut = $nextOut;
-            }
-        }
-
-        $parts[] = "[{$lastOut}]null[xfade_out]";
-        return implode(';', $parts);
+        return match ($protocol) {
+            'srt'    => "srt://{$host}:{$port}?streamid=static/{$key}&pkt_size=1316",
+            'rtsp'   => "rtsp://{$host}:{$port}/static/{$key}",
+            'mpegts' => "udp://{$host}:{$port}",
+            default  => "rtmp://{$host}:1935/static/{$key}",
+        };
     }
 
-    private function buildOverlayFilters($overlay, string $inputVideo, array &$inputs, int &$inputIndex): string
+    private function buildOutputFormat(Channel $channel): string
+    {
+        return match ($channel->ingest_protocol) {
+            'srt'    => '-f mpegts',
+            'rtsp'   => '-f rtsp -rtsp_transport tcp',
+            'mpegts' => '-f mpegts',
+            default  => '-f flv',
+        };
+    }
+
+    private function buildAllOverlayFilters($overlay, string $currentVideo, array &$inputs, int &$inputIndex): array
     {
         $filters = [];
-        $currentVideo = $inputVideo;
+        $font    = $this->getFontPath();
 
+        // Logo
         if ($overlay->logo_path && Storage::disk('public')->exists($overlay->logo_path)) {
-            $logoPath = Storage::disk('public')->path($overlay->logo_path);
-            $inputs[] = $logoPath;
-            $logoLabel = "[{$inputIndex}:v]";
-            $filters[] = "{$logoLabel}[{$currentVideo}]overlay=" . $this->getOverlayPosition($overlay->logo_position) . ":enable='between(t,0,999999)'";
-            $currentVideo = "logo_overlay";
-            $inputIndex++;
+            $logoPath   = Storage::disk('public')->path($overlay->logo_path);
+            $pos        = $this->getOverlayPosition($overlay->logo_position ?? 'top-left');
+            $w          = (int)($overlay->logo_width ?? 150);
+            $inputs[]   = $logoPath;
+            $logoIdx    = $inputIndex++;
+            $nextVideo  = "after_logo";
+            $filters[]  = "[{$logoIdx}:v]scale={$w}:-1[logo_scaled];[{$currentVideo}][logo_scaled]overlay={$pos}[{$nextVideo}]";
+            $currentVideo = $nextVideo;
         }
 
+        // Ticker (scrolling text top or bottom)
         if ($overlay->ticker_text) {
-            $fontFile = $this->getFontPath();
-            $escapedText = str_replace("'", "\\'", $overlay->ticker_text);
-            $speed = $overlay->ticker_speed;
-            $bgColor = $overlay->ticker_background_color;
-            $fontColor = $overlay->ticker_font_color;
-            $fontSize = $overlay->ticker_font_size;
-
-            $tickerY = 'h-th-10';
-            $drawText = ":fontfile='{$fontFile}':fontsize={$fontSize}:fontcolor={$fontColor}:" .
-                "box=1:boxcolor={$bgColor}:boxborderw=5:" .
-                "x='w-mod(t*{$speed},w+tw)':y={$tickerY}:text='{$escapedText}'";
-
-            $filters[] = "[{$currentVideo}]drawtext={$drawText}[overlay_out]";
-            return implode(';', $filters);
+            $text     = $this->escapeFFmpegText($overlay->ticker_text);
+            $speed    = (int)($overlay->ticker_speed ?? 50);
+            $bgColor  = $this->hexToFFmpegColor($overlay->ticker_background_color ?? '#00000080');
+            $fgColor  = $this->hexToFFmpegColor($overlay->ticker_font_color ?? '#FFFFFF');
+            $fontSize = (int)($overlay->ticker_font_size ?? 24);
+            $nextVideo = "after_ticker";
+            $filters[] = "[{$currentVideo}]drawtext=fontfile='{$font}':text='{$text}':fontsize={$fontSize}:fontcolor={$fgColor}:box=1:boxcolor={$bgColor}:boxborderw=5:x='w-mod(t*{$speed}\\,w+tw)':y=h-th-10[{$nextVideo}]";
+            $currentVideo = $nextVideo;
         }
 
+        // Crawl (news crawl at very bottom, separate from ticker)
+        if ($overlay->show_crawl && $overlay->crawl_text) {
+            $text     = $this->escapeFFmpegText($overlay->crawl_text);
+            $speed    = (int)($overlay->crawl_speed ?? 80);
+            $bgColor  = $this->hexToFFmpegColor($overlay->crawl_bg_color ?? '#000000CC');
+            $fgColor  = $this->hexToFFmpegColor($overlay->crawl_text_color ?? '#FFFF00');
+            $fontSize = (int)($overlay->crawl_font_size ?? 28);
+            $nextVideo = "after_crawl";
+            $filters[] = "[{$currentVideo}]drawtext=fontfile='{$font}':text='{$text}':fontsize={$fontSize}:fontcolor={$fgColor}:box=1:boxcolor={$bgColor}:boxborderw=8:x='w-mod(t*{$speed}\\,w+tw)':y=h-th-2[{$nextVideo}]";
+            $currentVideo = $nextVideo;
+        }
+
+        // Lower third
+        if ($overlay->show_lower_third && $overlay->lower_third_title) {
+            $title    = $this->escapeFFmpegText($overlay->lower_third_title);
+            $subtitle = $overlay->lower_third_subtitle ? $this->escapeFFmpegText($overlay->lower_third_subtitle) : null;
+            $bgColor  = $this->hexToFFmpegColor($overlay->lower_third_bg_color ?? '#1a1a1aCC');
+            $fgColor  = $this->hexToFFmpegColor($overlay->lower_third_text_color ?? '#FFFFFF');
+            $fontSize = (int)($overlay->lower_third_font_size ?? 32);
+            $duration = (int)($overlay->lower_third_duration ?? 5);
+            $pos      = $this->getLowerThirdPosition($overlay->lower_third_position ?? 'bottom-left');
+            $nextVideo = "after_lt";
+
+            $titleFilter = "drawtext=fontfile='{$font}':text='{$title}':fontsize={$fontSize}:fontcolor={$fgColor}:box=1:boxcolor={$bgColor}:boxborderw=10:{$pos['title']}:enable='lt(mod(t\\,30)\\,{$duration})'";
+
+            if ($subtitle) {
+                $subFontSize = max(16, $fontSize - 8);
+                $subtitleFilter = "drawtext=fontfile='{$font}':text='{$subtitle}':fontsize={$subFontSize}:fontcolor={$fgColor}:box=1:boxcolor={$bgColor}:boxborderw=6:{$pos['subtitle']}:enable='lt(mod(t\\,30)\\,{$duration})'";
+                $filters[] = "[{$currentVideo}]{$titleFilter},{$subtitleFilter}[{$nextVideo}]";
+            } else {
+                $filters[] = "[{$currentVideo}]{$titleFilter}[{$nextVideo}]";
+            }
+            $currentVideo = $nextVideo;
+        }
+
+        // Clock
         if ($overlay->show_clock) {
-            $filters[] = "[{$currentVideo}]drawtext=" .
-                ":fontfile='{$this->getFontPath()}':fontsize=24:fontcolor=white:" .
-                "x='w-tw-10':y=10:text='%{localtime\\:%Y-%m-%d %H\\\\:%M\\\\:%S}'[overlay_out]";
-            return implode(';', $filters);
+            $clockPos   = $this->getClockPosition($overlay->clock_position ?? 'top-right');
+            $nextVideo  = "after_clock";
+            $filters[]  = "[{$currentVideo}]drawtext=fontfile='{$font}':text='%{localtime\\:%H\\:%M\\:%S}':fontsize=24:fontcolor=white:box=1:boxcolor=black@0.5:boxborderw=5:{$clockPos}[{$nextVideo}]";
+            $currentVideo = $nextVideo;
         }
 
-        $filters[] = "[{$currentVideo}]null[overlay_out]";
-        return implode(';', $filters);
+        return [$currentVideo, $filters];
+    }
+
+    private function buildXfadeChain(int $total): array
+    {
+        $parts    = [];
+        $duration = 0.5;
+        $lastV    = '0:v';
+        $lastA    = '0:a';
+
+        for ($i = 1; $i < $total; $i++) {
+            $outV    = "xv{$i}";
+            $outA    = "xa{$i}";
+            $parts[] = "[{$lastV}][{$i}:v]xfade=transition=fade:duration={$duration}:offset=0[{$outV}]";
+            $parts[] = "[{$lastA}][{$i}:a]acrossfade=d={$duration}[{$outA}]";
+            $lastV   = $outV;
+            $lastA   = $outA;
+        }
+
+        return [$lastV, $lastA, implode(';', $parts)];
     }
 
     private function resolvePlaylistItemPath(VodPlaylistItem $item): ?string
@@ -195,19 +250,56 @@ class FFmpegCommandBuilder
     private function getOverlayPosition(string $position): string
     {
         return match ($position) {
-            'top-left' => '10:10',
-            'top-right' => 'W-w-10:10',
-            'bottom-left' => '10:H-h-10',
+            'top-right'    => 'W-w-10:10',
+            'bottom-left'  => '10:H-h-10',
             'bottom-right' => 'W-w-10:H-h-10',
-            'center' => '(W-w)/2:(H-h)/2',
-            default => '10:10',
+            'center'       => '(W-w)/2:(H-h)/2',
+            default        => '10:10',
         };
+    }
+
+    private function getLowerThirdPosition(string $position): array
+    {
+        return match ($position) {
+            'bottom-right' => ['title' => 'x=w-tw-20:y=h-th-60', 'subtitle' => 'x=w-tw-20:y=h-th-30'],
+            'center'       => ['title' => 'x=(w-tw)/2:y=h-th-60', 'subtitle' => 'x=(w-tw)/2:y=h-th-30'],
+            default        => ['title' => 'x=20:y=h-th-60', 'subtitle' => 'x=20:y=h-th-30'],
+        };
+    }
+
+    private function getClockPosition(string $position): string
+    {
+        return match ($position) {
+            'top-left'     => 'x=10:y=10',
+            'bottom-right' => 'x=w-tw-10:y=h-th-10',
+            'bottom-left'  => 'x=10:y=h-th-10',
+            default        => 'x=w-tw-10:y=10',
+        };
+    }
+
+    private function hexToFFmpegColor(string $hex): string
+    {
+        $hex = ltrim($hex, '#');
+        if (strlen($hex) === 8) {
+            // RRGGBBAA -> 0xRRGGBB@alpha
+            $r     = hexdec(substr($hex, 0, 2));
+            $g     = hexdec(substr($hex, 2, 2));
+            $b     = hexdec(substr($hex, 4, 2));
+            $alpha = round(hexdec(substr($hex, 6, 2)) / 255, 2);
+            return "0x" . strtoupper(substr($hex, 0, 6)) . "@{$alpha}";
+        }
+        return "0x{$hex}";
+    }
+
+    private function escapeFFmpegText(string $text): string
+    {
+        return str_replace(["'", ':', '\\'], ["\\'", '\\:', '\\\\'], $text);
     }
 
     private function getFontPath(): string
     {
         if (PHP_OS_FAMILY === 'Windows') {
-            return 'C\:/Windows/Fonts/arial.ttf';
+            return 'C\\:/Windows/Fonts/arial.ttf';
         }
         return '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf';
     }

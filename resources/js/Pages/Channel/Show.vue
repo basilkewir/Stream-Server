@@ -108,6 +108,20 @@ const overlayForm = useForm({
   show_clock: props.overlay_settings?.show_clock || false,
   clock_position: props.overlay_settings?.clock_position || 'top-right',
   enabled: props.overlay_settings?.enabled ?? true,
+  lower_third_title: props.overlay_settings?.lower_third_title || '',
+  lower_third_subtitle: props.overlay_settings?.lower_third_subtitle || '',
+  lower_third_position: props.overlay_settings?.lower_third_position || 'bottom-left',
+  lower_third_bg_color: props.overlay_settings?.lower_third_bg_color || '#1a1a1aCC',
+  lower_third_text_color: props.overlay_settings?.lower_third_text_color || '#FFFFFF',
+  lower_third_font_size: props.overlay_settings?.lower_third_font_size || 32,
+  lower_third_duration: props.overlay_settings?.lower_third_duration || 5,
+  show_lower_third: props.overlay_settings?.show_lower_third || false,
+  crawl_text: props.overlay_settings?.crawl_text || '',
+  crawl_speed: props.overlay_settings?.crawl_speed || 80,
+  crawl_bg_color: props.overlay_settings?.crawl_bg_color || '#000000CC',
+  crawl_text_color: props.overlay_settings?.crawl_text_color || '#FFFF00',
+  crawl_font_size: props.overlay_settings?.crawl_font_size || 28,
+  show_crawl: props.overlay_settings?.show_crawl || false,
 })
 
 const availableProtocols = ['rtmp', 'srt', 'rtsp', 'hls']
@@ -161,6 +175,32 @@ const transitionOptions = ['cut', 'fade', 'dissolve', 'wipeleft', 'wiperight']
 
 const copied = ref(null)
 let copyTimeout = null
+
+const logoPreviewStyle = computed(() => {
+  const pos = overlayForm.logo_position
+  const style = { position: 'absolute' }
+  if (pos.includes('top')) style.top = '8px'; else style.bottom = '40px'
+  if (pos.includes('left')) style.left = '8px'; else style.right = '8px'
+  return style
+})
+
+const clockPreviewStyle = computed(() => {
+  const pos = overlayForm.clock_position
+  const style = { position: 'absolute' }
+  if (pos.includes('top')) style.top = '8px'; else style.bottom = '8px'
+  if (pos.includes('left')) style.left = '8px'; else style.right = '8px'
+  return style
+})
+
+const lowerThirdPreviewStyle = computed(() => {
+  const pos = overlayForm.lower_third_position
+  const style = { position: 'absolute', background: overlayForm.lower_third_bg_color }
+  style.bottom = '40px'
+  if (pos === 'bottom-right') style.right = '16px'
+  else if (pos === 'center') { style.left = '50%'; style.transform = 'translateX(-50%)' }
+  else style.left = '16px'
+  return style
+})
 
 function copyToClipboard(text, label) {
   if (navigator.clipboard && window.isSecureContext) {
@@ -464,7 +504,49 @@ function copyToClipboard(text, label) {
           <!-- Overlay Tab -->
           <div class="p-6" v-if="activeTab === 'overlay'">
             <h3 class="text-lg font-semibold text-gray-900 mb-2">Overlay Settings</h3>
-            <p class="text-sm text-gray-500 mb-4">Applied only during VOD failover, not on live stream.</p>
+            <p class="text-sm text-gray-500 mb-4">Applied during VOD failover. Preview updates live as you type.</p>
+
+            <!-- Live Preview -->
+            <div class="mb-6">
+              <h4 class="text-sm font-semibold text-gray-700 mb-2">Live Preview</h4>
+              <div class="relative bg-gray-900 rounded-lg overflow-hidden" style="aspect-ratio:16/9;max-width:640px">
+                <div class="absolute inset-0 flex items-center justify-center">
+                  <span class="text-gray-600 text-sm">[ Video Frame ]</span>
+                </div>
+                <!-- Logo preview -->
+                <div v-if="overlay_settings?.logo_url && overlayForm.enabled"
+                  class="absolute"
+                  :style="logoPreviewStyle">
+                  <img :src="overlay_settings.logo_url" :style="{width: overlayForm.logo_width + 'px'}" class="object-contain" />
+                </div>
+                <!-- Clock preview -->
+                <div v-if="overlayForm.show_clock && overlayForm.enabled"
+                  class="absolute text-white text-xs font-mono bg-black bg-opacity-50 px-1 rounded"
+                  :style="clockPreviewStyle">
+                  {{ new Date().toLocaleTimeString() }}
+                </div>
+                <!-- Ticker preview -->
+                <div v-if="overlayForm.ticker_text && overlayForm.enabled"
+                  class="absolute bottom-8 left-0 right-0 overflow-hidden py-1"
+                  :style="{background: overlayForm.ticker_background_color, fontSize: overlayForm.ticker_font_size + 'px', color: overlayForm.ticker_font_color}">
+                  <div class="whitespace-nowrap animate-marquee px-4">{{ overlayForm.ticker_text }}</div>
+                </div>
+                <!-- Crawl preview -->
+                <div v-if="overlayForm.show_crawl && overlayForm.crawl_text && overlayForm.enabled"
+                  class="absolute bottom-0 left-0 right-0 overflow-hidden py-1"
+                  :style="{background: overlayForm.crawl_bg_color, fontSize: overlayForm.crawl_font_size + 'px', color: overlayForm.crawl_text_color}">
+                  <div class="whitespace-nowrap px-4">{{ overlayForm.crawl_text }}</div>
+                </div>
+                <!-- Lower Third preview -->
+                <div v-if="overlayForm.show_lower_third && overlayForm.lower_third_title && overlayForm.enabled"
+                  class="absolute px-4 py-2 rounded"
+                  :style="lowerThirdPreviewStyle">
+                  <div :style="{fontSize: overlayForm.lower_third_font_size + 'px', color: overlayForm.lower_third_text_color, fontWeight: 'bold'}">{{ overlayForm.lower_third_title }}</div>
+                  <div v-if="overlayForm.lower_third_subtitle" :style="{fontSize: (overlayForm.lower_third_font_size - 8) + 'px', color: overlayForm.lower_third_text_color, opacity: 0.85}">{{ overlayForm.lower_third_subtitle }}</div>
+                </div>
+              </div>
+            </div>
+
             <form @submit.prevent="handleOverlaySave" class="space-y-4 max-w-2xl">
               <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
                 <span class="text-sm font-medium text-gray-700">Enable Overlay</span>
@@ -472,12 +554,19 @@ function copyToClipboard(text, label) {
                   <span :class="overlayForm.enabled ? 'translate-x-6' : 'translate-x-1'" class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
                 </button>
               </div>
-              <div v-if="overlayForm.enabled">
-                <div class="border rounded-lg p-4 mb-4">
-                  <h4 class="font-medium text-gray-900 mb-2">Logo</h4>
+
+              <div v-if="overlayForm.enabled" class="space-y-4">
+                <!-- Logo -->
+                <div class="border rounded-lg p-4">
+                  <h4 class="font-medium text-gray-900 mb-3">Logo</h4>
                   <div v-if="overlay_settings?.logo_url" class="mb-2"><img :src="overlay_settings.logo_url" class="h-12 object-contain bg-gray-800 rounded p-1" /></div>
                   <div class="grid grid-cols-2 gap-3">
-                    <div><label class="block text-xs text-gray-600">Position</label><select v-model="overlayForm.logo_position" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs"><option value="top-left">Top Left</option><option value="top-right">Top Right</option><option value="bottom-left">Bottom Left</option><option value="bottom-right">Bottom Right</option></select></div>
+                    <div><label class="block text-xs text-gray-600">Position</label>
+                      <select v-model="overlayForm.logo_position" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs">
+                        <option value="top-left">Top Left</option><option value="top-right">Top Right</option>
+                        <option value="bottom-left">Bottom Left</option><option value="bottom-right">Bottom Right</option>
+                      </select>
+                    </div>
                     <div><label class="block text-xs text-gray-600">Width (px)</label><input v-model.number="overlayForm.logo_width" type="number" min="10" max="500" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
                   </div>
                   <form :action="route('channel.overlay.logo', { channel: channel.id })" method="post" enctype="multipart/form-data" class="mt-2">
@@ -486,26 +575,98 @@ function copyToClipboard(text, label) {
                     <button type="submit" class="mt-1 px-3 py-1 bg-gray-600 rounded font-semibold text-xs text-white hover:bg-gray-700">Upload Logo</button>
                   </form>
                 </div>
-                <div class="border rounded-lg p-4 mb-4">
-                  <h4 class="font-medium text-gray-900 mb-2">Ticker</h4>
+
+                <!-- Ticker -->
+                <div class="border rounded-lg p-4">
+                  <h4 class="font-medium text-gray-900 mb-3">Ticker (Scrolling Text)</h4>
                   <div><label class="block text-xs text-gray-600">Text</label><input v-model="overlayForm.ticker_text" maxlength="500" placeholder="Breaking news..." class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
-                  <div class="grid grid-cols-2 gap-3 mt-2">
-                    <div><label class="block text-xs text-gray-600">Speed</label><input v-model.number="overlayForm.ticker_speed" type="number" min="10" max="200" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                  <div class="grid grid-cols-3 gap-3 mt-2">
+                    <div><label class="block text-xs text-gray-600">Speed (px/s)</label><input v-model.number="overlayForm.ticker_speed" type="number" min="10" max="200" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
                     <div><label class="block text-xs text-gray-600">Font Size</label><input v-model.number="overlayForm.ticker_font_size" type="number" min="12" max="72" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                    <div><label class="block text-xs text-gray-600">Direction</label>
+                      <select v-model="overlayForm.ticker_direction" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs">
+                        <option value="left">Left</option><option value="right">Right</option>
+                      </select>
+                    </div>
                   </div>
                   <div class="grid grid-cols-2 gap-3 mt-2">
-                    <div><label class="block text-xs text-gray-600">Bg Color</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.ticker_background_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.ticker_background_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
-                    <div><label class="block text-xs text-gray-600">Font Color</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.ticker_font_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.ticker_font_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
+                    <div><label class="block text-xs text-gray-600">Background</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.ticker_background_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.ticker_background_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
+                    <div><label class="block text-xs text-gray-600">Text Color</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.ticker_font_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.ticker_font_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
                   </div>
                 </div>
-                <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                  <span class="text-sm font-medium text-gray-700">Show Clock</span>
-                  <button type="button" @click="overlayForm.show_clock = !overlayForm.show_clock" :class="overlayForm.show_clock ? 'bg-indigo-600' : 'bg-gray-300'" class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors">
-                    <span :class="overlayForm.show_clock ? 'translate-x-6' : 'translate-x-1'" class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"></span>
-                  </button>
+
+                <!-- Crawl -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <h4 class="font-medium text-gray-900">News Crawl (Bottom Strip)</h4>
+                    <button type="button" @click="overlayForm.show_crawl = !overlayForm.show_crawl" :class="overlayForm.show_crawl ? 'bg-indigo-600' : 'bg-gray-300'" class="relative inline-flex h-5 w-10 items-center rounded-full transition-colors">
+                      <span :class="overlayForm.show_crawl ? 'translate-x-5' : 'translate-x-1'" class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"></span>
+                    </button>
+                  </div>
+                  <div v-if="overlayForm.show_crawl">
+                    <div><label class="block text-xs text-gray-600">Crawl Text</label><textarea v-model="overlayForm.crawl_text" maxlength="1000" rows="2" placeholder="Latest news..." class="mt-0.5 block w-full border-gray-300 rounded-md text-xs"></textarea></div>
+                    <div class="grid grid-cols-3 gap-3 mt-2">
+                      <div><label class="block text-xs text-gray-600">Speed (px/s)</label><input v-model.number="overlayForm.crawl_speed" type="number" min="10" max="300" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                      <div><label class="block text-xs text-gray-600">Font Size</label><input v-model.number="overlayForm.crawl_font_size" type="number" min="12" max="72" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                      <div><label class="block text-xs text-gray-600">Background</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.crawl_bg_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.crawl_bg_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
+                      <div><label class="block text-xs text-gray-600">Text Color</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.crawl_text_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.crawl_text_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Lower Third -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <h4 class="font-medium text-gray-900">Lower Third</h4>
+                    <button type="button" @click="overlayForm.show_lower_third = !overlayForm.show_lower_third" :class="overlayForm.show_lower_third ? 'bg-indigo-600' : 'bg-gray-300'" class="relative inline-flex h-5 w-10 items-center rounded-full transition-colors">
+                      <span :class="overlayForm.show_lower_third ? 'translate-x-5' : 'translate-x-1'" class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"></span>
+                    </button>
+                  </div>
+                  <div v-if="overlayForm.show_lower_third">
+                    <div class="grid grid-cols-2 gap-3">
+                      <div><label class="block text-xs text-gray-600">Title</label><input v-model="overlayForm.lower_third_title" maxlength="200" placeholder="Name / Headline" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                      <div><label class="block text-xs text-gray-600">Subtitle</label><input v-model="overlayForm.lower_third_subtitle" maxlength="200" placeholder="Role / Description" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-3 mt-2">
+                      <div><label class="block text-xs text-gray-600">Position</label>
+                        <select v-model="overlayForm.lower_third_position" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs">
+                          <option value="bottom-left">Bottom Left</option>
+                          <option value="bottom-right">Bottom Right</option>
+                          <option value="center">Center</option>
+                        </select>
+                      </div>
+                      <div><label class="block text-xs text-gray-600">Font Size</label><input v-model.number="overlayForm.lower_third_font_size" type="number" min="16" max="72" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                      <div><label class="block text-xs text-gray-600">Show for (sec)</label><input v-model.number="overlayForm.lower_third_duration" type="number" min="1" max="30" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mt-2">
+                      <div><label class="block text-xs text-gray-600">Background</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.lower_third_bg_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.lower_third_bg_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
+                      <div><label class="block text-xs text-gray-600">Text Color</label><div class="flex gap-1 mt-0.5"><input v-model="overlayForm.lower_third_text_color" type="color" class="h-7 w-7 rounded border" /><input v-model="overlayForm.lower_third_text_color" type="text" class="flex-1 border-gray-300 rounded-md text-xs font-mono" /></div></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Clock -->
+                <div class="border rounded-lg p-4">
+                  <div class="flex items-center justify-between mb-3">
+                    <h4 class="font-medium text-gray-900">Clock</h4>
+                    <button type="button" @click="overlayForm.show_clock = !overlayForm.show_clock" :class="overlayForm.show_clock ? 'bg-indigo-600' : 'bg-gray-300'" class="relative inline-flex h-5 w-10 items-center rounded-full transition-colors">
+                      <span :class="overlayForm.show_clock ? 'translate-x-5' : 'translate-x-1'" class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform"></span>
+                    </button>
+                  </div>
+                  <div v-if="overlayForm.show_clock">
+                    <div><label class="block text-xs text-gray-600">Position</label>
+                      <select v-model="overlayForm.clock_position" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs max-w-[180px]">
+                        <option value="top-right">Top Right</option><option value="top-left">Top Left</option>
+                        <option value="bottom-right">Bottom Right</option><option value="bottom-left">Bottom Left</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <button type="submit" :disabled="overlayForm.processing" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700">Save Overlay</button>
+
+              <button type="submit" :disabled="overlayForm.processing" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 disabled:opacity-50">Save Overlay</button>
             </form>
           </div>
 
