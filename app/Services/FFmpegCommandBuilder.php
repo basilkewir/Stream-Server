@@ -270,6 +270,11 @@ class FFmpegCommandBuilder
         if ($item->type === 'youtube') {
             return $this->resolveYoutubeUrl($item->file_path_or_url);
         }
+        
+        if ($item->type === 'direct_url' || $item->type === 'cdn_upload') {
+            // Direct URLs and CDN uploads can be used directly
+            return $item->file_path_or_url;
+        }
 
         return null;
     }

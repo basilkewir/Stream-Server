@@ -138,7 +138,7 @@ class ChannelController extends Controller
         $this->authorize('update', $channel);
 
         $request->validate([
-            'file' => 'required|file|mimetypes:video/mp4,video/x-matroska,video/mp2t|max:512000',
+            'file' => 'required|file|mimetypes:video/mp4,video/x-matroska,video/mp2t,video/avi,video/mov,video/wmv,video/flv,video/webm,video/mkv|max:2048000', // Increased to 2GB
             'title' => 'nullable|string|max:255',
         ]);
 
@@ -146,7 +146,7 @@ class ChannelController extends Controller
             $vodService = app(VodPlaylistService::class);
             $item = $vodService->uploadFile($channel, $request->file('file'), $request->input('title'));
 
-            return back()->with('success', 'Video uploaded.');
+            return back()->with('success', 'Video uploaded successfully. Duration: ' . gmdate('H:i:s', $item->duration_sec ?? 0));
         } catch (\RuntimeException $e) {
             return back()->withErrors(['file' => $e->getMessage()]);
         }
@@ -170,6 +170,45 @@ class ChannelController extends Controller
         $vodService->addYouTubeUrl($channel, $request->input('url'), $request->input('title'));
 
         return back()->with('success', 'YouTube video added to playlist.');
+    }
+    
+    public function addDirectUrl(Request $request, Channel $channel)
+    {
+        $this->authorize('update', $channel);
+
+        $request->validate([
+            'url' => 'required|url',
+            'title' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $vodService = app(VodPlaylistService::class);
+            $item = $vodService->addDirectUrl($channel, $request->input('url'), $request->input('title'));
+            
+            $durationText = $item->duration_sec ? gmdate('H:i:s', $item->duration_sec) : 'Unknown';
+            return back()->with('success', "Direct stream URL added. Duration: {$durationText}");
+        } catch (\Exception $e) {
+            return back()->withErrors(['url' => 'Failed to add direct URL: ' . $e->getMessage()]);
+        }
+    }
+    
+    public function uploadToCdn(Request $request, Channel $channel)
+    {
+        $this->authorize('update', $channel);
+
+        $request->validate([
+            'file' => 'required|file|mimetypes:video/mp4,video/x-matroska,video/mp2t,video/avi,video/mov,video/wmv,video/flv,video/webm,video/mkv|max:2048000',
+            'title' => 'nullable|string|max:255',
+        ]);
+
+        try {
+            $vodService = app(VodPlaylistService::class);
+            $item = $vodService->uploadToCdn($channel, $request->file('file'), $request->input('title'));
+
+            return back()->with('success', 'Video uploaded to CDN. Duration: ' . gmdate('H:i:s', $item->duration_sec ?? 0));
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['file' => $e->getMessage()]);
+        }
     }
 
     public function deleteVod(Channel $channel, $vodItemId)
