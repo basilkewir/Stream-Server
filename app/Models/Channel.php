@@ -42,7 +42,7 @@ class Channel extends Model
         parent::boot();
         static::creating(function ($channel) {
             if (empty($channel->stream_key)) {
-                $channel->stream_key = (string) Str::uuid();
+                $channel->stream_key = bin2hex(random_bytes(8)); // 16 char alphanumeric, no special chars
             }
         });
     }
@@ -75,11 +75,11 @@ class Channel extends Model
         $key = $this->stream_key;
 
         return match ($protocol) {
-            'rtmp' => "rtmp://{$host}:{$port}/{$key}",
-            'srt' => "srt://{$host}:{$port}?streamid={$key}",
-            'rtsp' => "rtsp://{$host}:{$port}/{$key}",
+            'rtmp' => "rtmp://{$host}:{$port}/live/{$key}",
+            'srt' => "srt://{$host}:{$port}?streamid=live/{$key}",
+            'rtsp' => "rtsp://{$host}:{$port}/live/{$key}",
             'mpegts' => "udp://{$host}:{$port}",
-            default => "rtmp://{$host}:{$port}/{$key}",
+            default => "rtmp://{$host}:{$port}/live/{$key}",
         };
     }
 
@@ -87,14 +87,13 @@ class Channel extends Model
     {
         $host = config('flussonic.host', request()->getHost());
         $key = $this->stream_key;
-        $httpPort = config('flussonic.http_port', 80);
         $rtmpPort = config('flussonic.rtmp_port', 1935);
 
         return [
-            'rtmp' => "rtmp://{$host}:{$rtmpPort}/{$key}",
-            'hls' => "http://{$host}:{$httpPort}/{$key}/index.m3u8",
-            'dash' => "http://{$host}:{$httpPort}/{$key}/manifest.mpd",
-            'screenshot' => "http://{$host}:{$httpPort}/{$key}/screenshot.jpg",
+            'rtmp' => "rtmp://{$host}:{$rtmpPort}/live/{$key}",
+            'hls' => "http://{$host}/live/{$key}/index.m3u8",
+            'dash' => "http://{$host}/live/{$key}/manifest.mpd",
+            'screenshot' => "http://{$host}/live/{$key}/screenshot.jpg",
         ];
     }
 }

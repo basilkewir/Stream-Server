@@ -62,10 +62,10 @@ class FlussonicService
         $rtmpPort = config('flussonic.rtmp_port', 1935);
 
         return [
-            'rtmp' => "rtmp://{$host}:{$rtmpPort}/{$name}",
-            'hls' => "http://{$host}:{$this->httpPort}/{$name}/index.m3u8",
-            'dash' => "http://{$host}:{$this->httpPort}/{$name}/manifest.mpd",
-            'screenshot' => "http://{$host}:{$this->httpPort}/{$name}/screenshot.jpg",
+            'rtmp' => "rtmp://{$host}:{$rtmpPort}/live/{$name}",
+            'hls' => "http://{$host}/live/{$name}/index.m3u8",
+            'dash' => "http://{$host}/live/{$name}/manifest.mpd",
+            'screenshot' => "http://{$host}/live/{$name}/screenshot.jpg",
         ];
     }
 
@@ -134,11 +134,11 @@ class FlussonicService
         $key = $channel->stream_key;
 
         return match ($protocol) {
-            'rtmp' => "rtmp://{$host}:{$port}/{$key}",
-            'srt' => "srt://{$host}:{$port}?streamid={$key}",
-            'rtsp' => "rtsp://{$host}:{$port}/{$key}",
+            'rtmp' => "rtmp://{$host}:{$port}/live/{$key}",
+            'srt' => "srt://{$host}:{$port}?streamid=live/{$key}",
+            'rtsp' => "rtsp://{$host}:{$port}/live/{$key}",
             'mpegts' => "udp://{$host}:{$port}",
-            default => "rtmp://{$host}:{$port}/{$key}",
+            default => "rtmp://{$host}:{$port}/live/{$key}",
         };
     }
 

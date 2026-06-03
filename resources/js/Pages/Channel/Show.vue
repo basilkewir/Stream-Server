@@ -128,11 +128,11 @@ const ingestUrl = computed(() => {
   const port = props.channel.ingest_port
   const key = props.channel.stream_key
   switch (p) {
-    case 'rtmp': return `rtmp://${host}:${port}/${key}`
-    case 'srt': return `srt://${host}:${port}?streamid=${key}`
-    case 'rtsp': return `rtsp://${host}:${port}/${key}`
+    case 'rtmp': return `rtmp://${host}:${port}/live/${key}`
+    case 'srt': return `srt://${host}:${port}?streamid=live/${key}`
+    case 'rtsp': return `rtsp://${host}:${port}/live/${key}`
     case 'mpegts': return `udp://${host}:${port}`
-    default: return `rtmp://${host}:${port}/${key}`
+    default: return `rtmp://${host}:${port}/live/${key}`
   }
 })
 
@@ -140,10 +140,10 @@ const outputUrls = computed(() => {
   const host = window.location.hostname
   const key = props.channel.stream_key
   return {
-    hls: `http://${host}:8082/${key}/index.m3u8`,
-    rtmp: `rtmp://${host}:1935/${key}`,
-    dash: `http://${host}:8082/${key}/manifest.mpd`,
-    screenshot: `http://${host}:8082/${key}/screenshot.jpg`,
+    hls: `http://${host}/live/${key}/index.m3u8`,
+    rtmp: `rtmp://${host}:1935/live/${key}`,
+    dash: `http://${host}/live/${key}/manifest.mpd`,
+    screenshot: `http://${host}/live/${key}/screenshot.jpg`,
   }
 })
 
