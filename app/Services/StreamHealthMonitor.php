@@ -12,6 +12,7 @@ class StreamHealthMonitor
     public function __construct(
         private FFmpegCommandBuilder $ffmpeg,
         private FlussonicService $flussonic,
+        private YouTubeService $youtubeService,
     ) {}
 
     public function checkChannel(Channel $channel): array
@@ -171,20 +172,29 @@ class StreamHealthMonitor
         }
 
         $firstItem = $youtubeItems->first();
+        $youtubeUrl = $firstItem->file_path_or_url;
 
-        $success = $this->flussonic->pushVodToStream(
-            $channel->stream_key,
-            $firstItem->file_path_or_url
-        );
+        // Resolve the YouTube URL to a direct stream URL via yt-dlp
+        $streamUrl = $this->youtubeService->resolveStreamUrl($youtubeUrl);
+
+        // If we got a real stream URL (not the original YouTube page), use it
+        if ($streamUrl && $streamUrl !== $youtubeUrl) {
+            Log::info("Channel {$channel->id}: YouTube URL resolved to direct stream, pushing to Flussonic.");
+            $success = $this->flussonic->pushVodToStream($channel->stream_key, $streamUrl);
+        } else {
+            // Last resort: try the original YouTube URL (Flussonic may handle it if yt-dlp is built in)
+            Log::info("Channel {$channel->id}: Could not resolve YouTube to direct stream, trying original URL with Flussonic.");
+            $success = $this->flussonic->pushVodToStream($channel->stream_key, $youtubeUrl);
+        }
 
         if ($success) {
             $channel->update([
                 'failover_active' => true,
                 'failover_ffmpeg_pid' => null,
             ]);
-            Log::info("Channel {$channel->id}: Flussonic pulling YouTube URL: {$firstItem->file_path_or_url}");
+            Log::info("Channel {$channel->id}: Flussonic is now pulling YouTube: {$youtubeUrl}");
         } else {
-            Log::error("Channel {$channel->id}: Flussonic YouTube fallback also failed.");
+            Log::error("Channel {$channel->id}: Flussonic YouTube fallback failed. API returned error.");
         }
 
         return $success;

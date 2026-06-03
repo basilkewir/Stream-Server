@@ -46,7 +46,7 @@ class YouTubeService
         try {
             $ytdlpPath = $this->findYtDlpPath();
             if ($ytdlpPath) {
-                $cmd = "timeout 30 {$ytdlpPath} --no-playlist --dump-json --no-warnings " . escapeshellarg($url) . ' 2>/dev/null';
+                $cmd = "{$ytdlpPath} --no-playlist --dump-json --no-warnings " . escapeshellarg($url);
                 $output = shell_exec($cmd);
 
                 if (!empty($output)) {
@@ -83,7 +83,7 @@ class YouTubeService
         try {
             $youtubeDlPath = $this->findYoutubeDlPath();
             if ($youtubeDlPath) {
-                $cmd = "timeout 30 {$youtubeDlPath} --no-playlist --dump-json --no-warnings " . escapeshellarg($url) . ' 2>/dev/null';
+                $cmd = "{$youtubeDlPath} --no-playlist --dump-json --no-warnings " . escapeshellarg($url);
                 $output = shell_exec($cmd);
 
                 if (!empty($output)) {
@@ -126,7 +126,7 @@ class YouTubeService
         $ytdlpPath = $this->findYtDlpPath();
         if ($ytdlpPath) {
             try {
-                $cmd = "timeout 30 {$ytdlpPath} -f 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]' -g " . escapeshellarg($url) . ' 2>/dev/null';
+                $cmd = "{$ytdlpPath} -f 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]' -g " . escapeshellarg($url);
                 $output = trim((string) shell_exec($cmd));
 
                 if (!empty($output)) {
@@ -144,7 +144,7 @@ class YouTubeService
         $youtubeDlPath = $this->findYoutubeDlPath();
         if ($youtubeDlPath) {
             try {
-                $cmd = "timeout 30 {$youtubeDlPath} -f 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]' -g " . escapeshellarg($url) . ' 2>/dev/null';
+                $cmd = "{$youtubeDlPath} -f 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]' -g " . escapeshellarg($url);
                 $output = trim((string) shell_exec($cmd));
 
                 if (!empty($output)) {
@@ -262,7 +262,7 @@ class YouTubeService
         if ($ytdlpPath) {
             $status['yt_dlp']['available'] = true;
             $status['yt_dlp']['path'] = $ytdlpPath;
-            $version = trim(shell_exec($ytdlpPath . ' --version 2>/dev/null') ?: '');
+            $version = trim(shell_exec($ytdlpPath . ' --version 2>&1') ?: '');
             $status['yt_dlp']['version'] = $version ?: 'unknown';
         }
 
@@ -271,7 +271,7 @@ class YouTubeService
         if ($youtubeDlPath) {
             $status['youtube_dl']['available'] = true;
             $status['youtube_dl']['path'] = $youtubeDlPath;
-            $version = trim(shell_exec($youtubeDlPath . ' --version 2>/dev/null') ?: '');
+            $version = trim(shell_exec($youtubeDlPath . ' --version 2>&1') ?: '');
             $status['youtube_dl']['version'] = $version ?: 'unknown';
         }
 
