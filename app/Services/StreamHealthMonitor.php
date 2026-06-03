@@ -131,13 +131,13 @@ class StreamHealthMonitor
 
         // Write command to a temp script so nohup can run it cleanly
         $scriptPath = "/tmp/ffmpeg_channel_{$channel->id}.sh";
-        $logPath    = "/var/log/ffmpeg_channel_{$channel->id}.log";
+        $logPath    = "/tmp/ffmpeg_channel_{$channel->id}.log";
 
         file_put_contents($scriptPath, "#!/bin/bash\n{$cmd}\n");
         chmod($scriptPath, 0755);
 
         // Launch detached from PHP process entirely
-        $fullCmd = "nohup bash {$scriptPath} > {$logPath} 2>&1 & echo \$!";
+        $fullCmd = "nohup bash {$scriptPath} > {$logPath} 2>&1 < /dev/null & echo \$!";
         $pid     = trim((string) shell_exec($fullCmd));
 
         if ($pid && is_numeric($pid)) {
