@@ -100,9 +100,16 @@ class ChannelController extends Controller
         $this->authorize('delete', $channel);
 
         try {
-            app(FlussonicService::class)->stopStream($channel->stream_key);
+            $streamKey = $channel->stream_key;
+            $configPath = '/etc/flussonic/flussonic.conf';
+            if (is_writable($configPath)) {
+                $config = file_get_contents($configPath);
+                $config = preg_replace("/\nstream {$streamKey} \{[^}]*\}\n/s", '', $config);
+                file_put_contents($configPath, $config);
+                exec('systemctl restart flussonic');
+            }
         } catch (\Exception $e) {
-            Log::warning('Could not remove stream from Flussonic: ' . $e->getMessage());
+            Log::warning('Could not remove stream from Flussonic config: ' . $e->getMessage());
         }
 
         $channel->delete();
@@ -113,19 +120,16 @@ class ChannelController extends Controller
     private function provisionFlussonic(Channel $channel): void
     {
         try {
-            $host = config('flussonic.host', '127.0.0.1');
-            $apiPort = config('flussonic.api_port', 80);
-            $login = config('flussonic.login', 'admin');
-            $password = config('flussonic.password', 'admin');
+            $streamKey = $channel->stream_key;
+            $configPath = '/etc/flussonic/flussonic.conf';
+            $block = "\nstream {$streamKey} {\n  input publish://;\n}\n";
 
-            \Illuminate\Support\Facades\Http::withBasicAuth($login, $password)
-                ->asJson()
-                ->put("http://{$host}:{$apiPort}/flussonic/api/v3/streams/{$channel->stream_key}", [
-                    'name' => $channel->stream_key,
-                    'input' => ['src' => 'publish://'],
-                ]);
+            if (is_writable($configPath) && !str_contains(file_get_contents($configPath), "stream {$streamKey}")) {
+                file_put_contents($configPath, $block, FILE_APPEND);
+                exec('systemctl restart flussonic');
+            }
         } catch (\Exception $e) {
-            Log::warning('Could not provision stream in Flussonic: ' . $e->getMessage());
+            Log::warning('Could not provision stream in Flussonic config: ' . $e->getMessage());
         }
     }
 
