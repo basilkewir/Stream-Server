@@ -284,7 +284,7 @@ class ChannelController extends Controller
         $this->authorize('update', $channel);
 
         $request->validate([
-            'logo' => 'required|image|mimes:png|max:2048',
+            'logo' => 'required|image|mimes:png,jpg,jpeg,gif|max:2048',
         ]);
 
         $url = app(OverlayService::class)->uploadLogo($channel, $request->file('logo'));

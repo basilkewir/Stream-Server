@@ -133,8 +133,13 @@ function toggleOutputProtocol(protocol) {
   else channelForm.output_protocols_json.push(protocol)
 }
 
-function handleChannelUpdate() { channelForm.put(route('channel.update', { channel: props.channel.id })) }
-function handleOverlaySave() { overlayForm.put(route('channel.overlay.update', { channel: props.channel.id })) }
+const logoForm = useForm({ logo: null })
+
+function handleLogoUpload() {
+  logoForm.post(route('channel.overlay.logo', { channel: props.channel.id }), {
+    onSuccess: () => logoForm.reset()
+  })
+}
 
 const ingestUrl = computed(() => {
   const host = window.location.hostname
@@ -634,10 +639,10 @@ function copyToClipboard(text, label) {
                     </div>
                     <div><label class="block text-xs text-gray-600">Width (px)</label><input v-model.number="overlayForm.logo_width" type="number" min="10" max="500" class="mt-0.5 block w-full border-gray-300 rounded-md text-xs" /></div>
                   </div>
-                  <form :action="route('channel.overlay.logo', { channel: channel.id })" method="post" enctype="multipart/form-data" class="mt-2">
-                    <input type="hidden" name="_token" :value="$page.props.csrf_token" />
-                    <input type="file" name="logo" accept="image/png" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700" />
-                    <button type="submit" class="mt-1 px-3 py-1 bg-gray-600 rounded font-semibold text-xs text-white hover:bg-gray-700">Upload Logo</button>
+                  <form @submit.prevent="handleLogoUpload" class="mt-2">
+                    <input type="file" @change="logoForm.logo = $event.target.files[0]" accept="image/png,image/jpeg,image/gif" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700" />
+                    <button type="submit" :disabled="!logoForm.logo || logoForm.processing" class="mt-1 px-3 py-1 bg-gray-600 rounded font-semibold text-xs text-white hover:bg-gray-700 disabled:opacity-50">{{ logoForm.processing ? 'Uploading...' : 'Upload Logo' }}</button>
+                    <span v-if="logoForm.wasSuccessful" class="ml-2 text-xs text-green-600">Uploaded!</span>
                   </form>
                 </div>
 
