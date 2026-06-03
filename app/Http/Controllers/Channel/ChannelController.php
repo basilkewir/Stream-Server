@@ -248,6 +248,8 @@ class ChannelController extends Controller
             return back()->withErrors(['error' => 'Failed to refresh YouTube metadata. Please ensure yt-dlp is installed.']);
         }
     }
+
+    public function playlistStats(Channel $channel)
     {
         $this->authorize('view', $channel);
 
