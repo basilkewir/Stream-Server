@@ -67,6 +67,28 @@ git fetch origin
 git checkout main
 git pull origin main
 
+# Ask for YouTube API key if not configured
+CURRENT_KEY=$(grep "^YOUTUBE_API_KEY=" "$PROJECT_DIR/.env" | cut -d= -f2- | tr -d '"')
+if [ -z "$CURRENT_KEY" ]; then
+    echo ""
+    echo "YouTube Data API v3 key not set. (Get one: https://console.cloud.google.com/apis/credentials)"
+    echo -n "Enter YouTube API key (press Enter to skip): "
+    read -r YOUTUBE_API_KEY
+    if [ -n "$YOUTUBE_API_KEY" ]; then
+        if grep -q "^YOUTUBE_API_KEY=" "$PROJECT_DIR/.env"; then
+            sed -i "s/YOUTUBE_API_KEY=.*/YOUTUBE_API_KEY=\"${YOUTUBE_API_KEY}\"/" "$PROJECT_DIR/.env"
+        else
+            echo "YOUTUBE_API_KEY=\"${YOUTUBE_API_KEY}\"" >> "$PROJECT_DIR/.env"
+        fi
+        log "YouTube API key saved. Clear config cache to apply..."
+        php artisan config:clear
+    else
+        log "Skipped. YouTube metadata will rely on yt-dlp fallback."
+    fi
+else
+    log "YouTube API key already configured."
+fi
+
 log "📦 Installing/updating Composer dependencies..."
 composer install --no-dev --optimize-autoloader --no-interaction
 
