@@ -94,7 +94,7 @@ class FFmpegCommandBuilder
         $cmd .= "-c:v libx264 -preset veryfast -b:v 2000k -maxrate 2500k -bufsize 4000k ";
         $cmd .= "-c:a aac -b:a 128k -ar 44100 ";
         $cmd .= "-g 60 -keyint_min 60 -sc_threshold 0 ";
-        $cmd .= "-f flv \"rtmp://{$host}:{$rtmpPort}/{$channel->stream_key}\"";
+        $cmd .= "-f flv \"rtmp://{$host}:{$rtmpPort}/static/{$channel->stream_key}\"";
 
         return $cmd;
     }
@@ -110,7 +110,7 @@ class FFmpegCommandBuilder
             "loop=-1:size=1:start=0\" " .
             "-c:v libx264 -preset ultrafast -b:v 500k " .
             "-c:a anullsrc -b:a 32k -ar 44100 -ac 2 " .
-            "-f flv \"rtmp://{$host}:{$rtmpPort}/{$channel->stream_key}\"";
+            "-f flv \"rtmp://{$host}:{$rtmpPort}/static/{$channel->stream_key}\"";
     }
 
     private function buildXfadeChain(int $count, array $labels): string

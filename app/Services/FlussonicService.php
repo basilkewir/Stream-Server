@@ -38,7 +38,7 @@ class FlussonicService
         $stream = $this->getStream($name);
         if (!$stream) return false;
 
-        return ($stream['alive'] ?? false) === true;
+        return ($stream['stats']['alive'] ?? false) === true;
     }
 
     public function getStreamStats(string $name): ?array
@@ -46,13 +46,15 @@ class FlussonicService
         $stream = $this->getStream($name);
         if (!$stream) return null;
 
+        $stats = $stream['stats'] ?? [];
+
         return [
-            'alive' => $stream['alive'] ?? false,
+            'alive' => $stats['alive'] ?? false,
             'name' => $stream['name'] ?? $name,
             'input_url' => $stream['input_url'] ?? null,
-            'clients' => $stream['clients'] ?? 0,
-            'bitrate' => $stream['bitrate'] ?? 0,
-            'uptime' => $stream['uptime'] ?? null,
+            'clients' => $stats['client_count'] ?? 0,
+            'bitrate' => $stats['inputs_bandwidth'] ?? 0,
+            'uptime' => $stats['lifetime'] ?? null,
         ];
     }
 
