@@ -129,9 +129,9 @@ class ChannelController extends Controller
 
             \Illuminate\Support\Facades\Http::withBasicAuth($login, $password)
                 ->asJson()
-                ->post("http://{$host}:{$apiPort}/flussonic/api/stream/{$channel->stream_key}", [
+                ->put("http://{$host}:{$apiPort}/api/v3/streams/{$channel->stream_key}", [
                     'name' => $channel->stream_key,
-                    'url'  => $ingestUrl,
+                    'src'  => $ingestUrl,
                 ]);
         } catch (\Exception $e) {
             Log::warning('Could not provision stream in Flussonic: ' . $e->getMessage());
