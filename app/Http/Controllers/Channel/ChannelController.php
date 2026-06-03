@@ -192,7 +192,12 @@ class ChannelController extends Controller
 
         app(VodPlaylistService::class)->reorder($channel, $request->input('ordered_ids'));
 
-        return response()->json(['status' => 'ok']);
+        // Handle AJAX requests that expect JSON
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['status' => 'ok']);
+        }
+
+        return back()->with('success', 'Playlist reordered successfully.');
     }
 
     public function updateVodItem(Request $request, Channel $channel, $vodItemId)
@@ -202,7 +207,12 @@ class ChannelController extends Controller
         $vodService = app(VodPlaylistService::class);
         $item = $vodService->updateItem($channel, $vodItemId, $request->all());
 
-        return response()->json(['item' => $item]);
+        // Handle AJAX requests that expect JSON
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['item' => $item]);
+        }
+
+        return back()->with('success', 'Playlist item updated successfully.');
     }
 
     public function bulkUpdateVod(Request $request, Channel $channel)
@@ -215,7 +225,12 @@ class ChannelController extends Controller
 
         app(VodPlaylistService::class)->bulkUpdate($channel, $request->input('items'));
 
-        return response()->json(['status' => 'ok']);
+        // Handle AJAX requests that expect JSON
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['status' => 'ok']);
+        }
+
+        return back()->with('success', 'Playlist items updated successfully.');
     }
 
     public function updatePlaylistSettings(Request $request, Channel $channel)
@@ -230,7 +245,15 @@ class ChannelController extends Controller
 
         app(VodPlaylistService::class)->updateChannelPlaylistSettings($channel, $validated);
 
-        return response()->json(['status' => 'ok', 'settings' => $channel->fresh()->only(['playlist_mode', 'playlist_loop', 'playlist_fill_action'])]);
+        // Handle AJAX requests that expect JSON
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'status' => 'ok', 
+                'settings' => $channel->fresh()->only(['playlist_mode', 'playlist_loop', 'playlist_fill_action'])
+            ]);
+        }
+
+        return back()->with('success', 'Playlist settings updated successfully.');
     }
 
     public function refreshYoutubeMetadata(Channel $channel, $vodItemId)
