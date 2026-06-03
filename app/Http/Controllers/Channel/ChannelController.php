@@ -122,6 +122,7 @@ class ChannelController extends Controller
                 ->asJson()
                 ->put("http://{$host}:{$apiPort}/flussonic/api/v3/streams/{$channel->stream_key}", [
                     'name' => $channel->stream_key,
+                    'input' => ['src' => 'publish://'],
                 ]);
         } catch (\Exception $e) {
             Log::warning('Could not provision stream in Flussonic: ' . $e->getMessage());

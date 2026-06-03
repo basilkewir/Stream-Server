@@ -75,11 +75,11 @@ class Channel extends Model
         $key = $this->stream_key;
 
         return match ($protocol) {
-            'rtmp' => "rtmp://{$host}:{$port}/live/{$key}",
-            'srt' => "srt://{$host}:{$port}?streamid=live/{$key}",
-            'rtsp' => "rtsp://{$host}:{$port}/live/{$key}",
+            'rtmp' => "rtmp://{$host}:{$port}/static/{$key}",
+            'srt' => "srt://{$host}:{$port}?streamid=static/{$key}",
+            'rtsp' => "rtsp://{$host}:{$port}/static/{$key}",
             'mpegts' => "udp://{$host}:{$port}",
-            default => "rtmp://{$host}:{$port}/live/{$key}",
+            default => "rtmp://{$host}:{$port}/static/{$key}",
         };
     }
 
@@ -90,10 +90,10 @@ class Channel extends Model
         $rtmpPort = config('flussonic.rtmp_port', 1935);
 
         return [
-            'rtmp' => "rtmp://{$host}:{$rtmpPort}/live/{$key}",
-            'hls' => "http://{$host}/live/{$key}/index.m3u8",
-            'dash' => "http://{$host}/live/{$key}/manifest.mpd",
-            'screenshot' => "http://{$host}/live/{$key}/screenshot.jpg",
+            'rtmp' => "rtmp://{$host}:{$rtmpPort}/static/{$key}",
+            'hls' => "http://{$host}/static/{$key}/index.m3u8",
+            'dash' => "http://{$host}/static/{$key}/manifest.mpd",
+            'screenshot' => "http://{$host}/static/{$key}/screenshot.jpg",
         ];
     }
 }

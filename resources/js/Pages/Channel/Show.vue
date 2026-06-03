@@ -128,11 +128,11 @@ const ingestUrl = computed(() => {
   const port = props.channel.ingest_port
   const key = props.channel.stream_key
   switch (p) {
-    case 'rtmp': return `rtmp://${host}:${port}/live/${key}`
-    case 'srt': return `srt://${host}:${port}?streamid=live/${key}`
-    case 'rtsp': return `rtsp://${host}:${port}/live/${key}`
+    case 'rtmp': return `rtmp://${host}:${port}/static/${key}`
+    case 'srt': return `srt://${host}:${port}?streamid=static/${key}`
+    case 'rtsp': return `rtsp://${host}:${port}/static/${key}`
     case 'mpegts': return `udp://${host}:${port}`
-    default: return `rtmp://${host}:${port}/live/${key}`
+    default: return `rtmp://${host}:${port}/static/${key}`
   }
 })
 
@@ -140,10 +140,10 @@ const outputUrls = computed(() => {
   const host = window.location.hostname
   const key = props.channel.stream_key
   return {
-    hls: `http://${host}/live/${key}/index.m3u8`,
-    rtmp: `rtmp://${host}:1935/live/${key}`,
-    dash: `http://${host}/live/${key}/manifest.mpd`,
-    screenshot: `http://${host}/live/${key}/screenshot.jpg`,
+    hls: `http://${host}/static/${key}/index.m3u8`,
+    rtmp: `rtmp://${host}:1935/static/${key}`,
+    dash: `http://${host}/static/${key}/manifest.mpd`,
+    screenshot: `http://${host}/static/${key}/screenshot.jpg`,
   }
 })
 
@@ -163,11 +163,27 @@ const copied = ref(null)
 let copyTimeout = null
 
 function copyToClipboard(text, label) {
-  navigator.clipboard.writeText(text).then(() => {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => {
+      copied.value = label
+      clearTimeout(copyTimeout)
+      copyTimeout = setTimeout(() => { copied.value = null }, 2000)
+    })
+  } else {
+    // Fallback for HTTP (non-secure context)
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.position = 'fixed'
+    el.style.opacity = '0'
+    document.body.appendChild(el)
+    el.focus()
+    el.select()
+    document.execCommand('copy')
+    document.body.removeChild(el)
     copied.value = label
     clearTimeout(copyTimeout)
     copyTimeout = setTimeout(() => { copied.value = null }, 2000)
-  })
+  }
 }
 </script>
 
