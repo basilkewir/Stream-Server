@@ -41,6 +41,7 @@ class FFmpegCommandBuilder
                     [$vidUrl, $audUrl] = explode('|', $path, 2);
                     $inputs[]      = $vidUrl;
                     $inputs[]      = $audUrl;
+                    // video from first input, audio from second input of this pair
                     $concatParts[] = "[{$inputIndex}:v][" . ($inputIndex + 1) . ":a]";
                     $inputIndex   += 2;
                 } else {
@@ -60,9 +61,9 @@ class FFmpegCommandBuilder
         }
 
         $filterComplex = [];
-        $currentVideo  = '0:v';
-        $currentAudio  = '0:a';
-        $total         = count($inputs);
+        $currentVideo  = $concatParts[0] === '[0:v][0:a]' ? '0:v' : '0:v';
+        $currentAudio  = count($inputs) > count($concatParts) ? '1:a' : '0:a'; // YT split: audio on input 1
+        $total         = count($concatParts);
 
         if ($total > 1) {
             if ($useXfade) {
