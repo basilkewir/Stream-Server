@@ -181,8 +181,11 @@ class YouTubeService
         $paths = [
             '/usr/local/bin/yt-dlp',
             '/usr/bin/yt-dlp',
+            '/snap/bin/yt-dlp',
+            '/opt/yt-dlp/yt-dlp',
             '/home/www-data/.local/bin/yt-dlp',
             trim(shell_exec('which yt-dlp 2>/dev/null') ?: ''),
+            trim(shell_exec('whereis yt-dlp 2>/dev/null | cut -d: -f2 | awk "{print \$1}"') ?: ''),
         ];
 
         foreach ($paths as $path) {
@@ -270,6 +273,9 @@ class YouTubeService
 
         return $status;
     }
+
+    private function enhancedFallbackMetadata(string $videoId, string $url): array
+    {
         // Try YouTube oEmbed API for basic metadata
         try {
             $oembedUrl = 'https://www.youtube.com/oembed?url=' . urlencode($url) . '&format=json';
