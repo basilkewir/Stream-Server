@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Channel;
 
 use App\Http\Controllers\Controller;
 use App\Models\Channel;
+use App\Services\FlussonicService;
 use App\Services\OverlayService;
 use App\Services\VodPlaylistService;
 use App\Services\YouTubeService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 
 class ChannelController extends Controller
@@ -68,6 +70,8 @@ class ChannelController extends Controller
             'output_protocols_json' => ['rtmp'],
         ]);
 
+        $this->provisionFlussonic($channel);
+
         return Redirect::route('channel.show', $channel);
     }
 
@@ -94,9 +98,44 @@ class ChannelController extends Controller
     public function destroy(Channel $channel)
     {
         $this->authorize('delete', $channel);
+
+        try {
+            app(FlussonicService::class)->stopStream($channel->stream_key);
+        } catch (\Exception $e) {
+            Log::warning('Could not remove stream from Flussonic: ' . $e->getMessage());
+        }
+
         $channel->delete();
 
         return Redirect::route('dashboard')->with('success', 'Channel deleted.');
+    }
+
+    private function provisionFlussonic(Channel $channel): void
+    {
+        try {
+            $flussonic = app(FlussonicService::class);
+            $host = config('flussonic.host', '127.0.0.1');
+            $apiPort = config('flussonic.api_port', 8080);
+            $login = config('flussonic.login', 'admin');
+            $password = config('flussonic.password', 'admin');
+
+            $ingestUrl = match ($channel->ingest_protocol) {
+                'rtmp'   => "rtmp://:{$channel->ingest_port}/{$channel->stream_key}",
+                'srt'    => "srt://:{$channel->ingest_port}?streamid={$channel->stream_key}",
+                'rtsp'   => "rtsp://:{$channel->ingest_port}/{$channel->stream_key}",
+                'mpegts' => "udp://:{$channel->ingest_port}",
+                default  => "rtmp://:{$channel->ingest_port}/{$channel->stream_key}",
+            };
+
+            \Illuminate\Support\Facades\Http::withBasicAuth($login, $password)
+                ->asJson()
+                ->post("http://{$host}:{$apiPort}/flussonic/api/stream/{$channel->stream_key}", [
+                    'name' => $channel->stream_key,
+                    'url'  => $ingestUrl,
+                ]);
+        } catch (\Exception $e) {
+            Log::warning('Could not provision stream in Flussonic: ' . $e->getMessage());
+        }
     }
 
     public function uploadVod(Request $request, Channel $channel)
