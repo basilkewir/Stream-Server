@@ -40,17 +40,31 @@ if ! command -v yt-dlp &> /dev/null; then
     echo "Installing yt-dlp for YouTube metadata extraction..."
     apt update -qq
     apt install -y python3-pip python3-venv
-    pip3 install --upgrade yt-dlp
     
-    # Also install for www-data user
-    sudo -u www-data pip3 install --user yt-dlp
+    # Try different pip commands
+    if command -v pip3 &> /dev/null; then
+        pip3 install --upgrade yt-dlp
+    elif command -v pip &> /dev/null; then
+        pip install --upgrade yt-dlp
+    elif command -v python3 -m pip &> /dev/null; then
+        python3 -m pip install --upgrade yt-dlp
+    else
+        echo "⚠️ Could not find pip. Installing via apt..."
+        apt install -y yt-dlp || echo "yt-dlp not available in apt, manual installation may be needed"
+    fi
     
     echo "✓ yt-dlp installed successfully"
 else
     echo "✓ yt-dlp already installed: $(yt-dlp --version)"
-    # Update yt-dlp to latest version
-    pip3 install --upgrade yt-dlp
-    sudo -u www-data pip3 install --user --upgrade yt-dlp
+fi
+
+# Install for www-data user if possible
+if command -v pip3 &> /dev/null; then
+    sudo -u www-data pip3 install --user --upgrade yt-dlp 2>/dev/null || echo "Note: Could not install yt-dlp for www-data user"
+elif command -v pip &> /dev/null; then
+    sudo -u www-data pip install --user --upgrade yt-dlp 2>/dev/null || echo "Note: Could not install yt-dlp for www-data user"
+elif command -v python3 &> /dev/null; then
+    sudo -u www-data python3 -m pip install --user --upgrade yt-dlp 2>/dev/null || echo "Note: Could not install yt-dlp for www-data user"
 fi
 
 echo "Verifying Flussonic integration..."
@@ -89,10 +103,27 @@ chmod -R 775 "$APP_DIR/storage" "$APP_DIR/bootstrap/cache"
 
 # Test YouTube functionality
 echo "Testing YouTube metadata extraction..."
-if sudo -u www-data timeout 10 yt-dlp --no-playlist --dump-json "https://www.youtube.com/watch?v=dQw4w9WgXcQ" > /dev/null 2>&1; then
-    echo "✓ YouTube metadata extraction test passed"
+if command -v yt-dlp &> /dev/null; then
+    if sudo -u www-data timeout 10 yt-dlp --no-playlist --dump-json "https://www.youtube.com/watch?v=dQw4w9WgXcQ" > /dev/null 2>&1; then
+        echo "✓ YouTube metadata extraction test passed"
+    else
+        echo "⚠️ YouTube metadata extraction test failed - may need PATH configuration"
+        echo "   Trying to add common yt-dlp paths to www-data environment..."
+        
+        # Check common installation paths
+        YT_DLP_PATHS=("/usr/local/bin/yt-dlp" "/usr/bin/yt-dlp" "/home/www-data/.local/bin/yt-dlp")
+        for path in "${YT_DLP_PATHS[@]}"; do
+            if [ -x "$path" ]; then
+                echo "   Found yt-dlp at: $path"
+                if sudo -u www-data timeout 10 "$path" --no-playlist --dump-json "https://www.youtube.com/watch?v=dQw4w9WgXcQ" > /dev/null 2>&1; then
+                    echo "✓ YouTube metadata extraction working with full path"
+                    break
+                fi
+            fi
+        done
+    fi
 else
-    echo "⚠️ YouTube metadata extraction test failed - may need manual configuration"
+    echo "⚠️ yt-dlp not found in system PATH"
 fi
 
 # Refresh existing YouTube videos with missing metadata
