@@ -126,8 +126,8 @@ class StreamHealthMonitor
         }
 
         // Write command to a temp script so nohup can run it cleanly
-        $scriptPath = "/tmp/ffmpeg_channel_{$channel->id}.sh";
-        $logPath    = "/tmp/ffmpeg_channel_{$channel->id}.log";
+        $scriptPath = storage_path("ffmpeg/channel_{$channel->id}.sh");
+        $logPath    = storage_path("ffmpeg/channel_{$channel->id}.log");
 
         file_put_contents($scriptPath, "#!/bin/bash\n{$cmd}\n");
         chmod($scriptPath, 0755);
@@ -154,7 +154,7 @@ class StreamHealthMonitor
         shell_exec("pkill -P {$pid} 2>/dev/null");
 
         // Clean up script file
-        @unlink("/tmp/ffmpeg_channel_{$channel->id}.sh");
+        @unlink(storage_path("ffmpeg/channel_{$channel->id}.sh"));
 
         Log::info("Stopped VOD FFmpeg PID {$pid} for channel {$channel->id}");
     }
