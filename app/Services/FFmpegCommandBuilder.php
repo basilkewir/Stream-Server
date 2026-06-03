@@ -32,10 +32,22 @@ class FFmpegCommandBuilder
             if (!$path) continue;
 
             $loops = max(1, (int)($item->loop_count ?? 1));
+
+            // YouTube returns video|audio as two separate stream URLs
+            $isYtSplit = str_contains($path, '|');
+
             for ($l = 0; $l < $loops; $l++) {
-                $inputs[]      = $path;
-                $concatParts[] = "[{$inputIndex}:v][{$inputIndex}:a]";
-                $inputIndex++;
+                if ($isYtSplit) {
+                    [$vidUrl, $audUrl] = explode('|', $path, 2);
+                    $inputs[]      = $vidUrl;
+                    $inputs[]      = $audUrl;
+                    $concatParts[] = "[{$inputIndex}:v][" . ($inputIndex + 1) . ":a]";
+                    $inputIndex   += 2;
+                } else {
+                    $inputs[]      = $path;
+                    $concatParts[] = "[{$inputIndex}:v][{$inputIndex}:a]";
+                    $inputIndex++;
+                }
             }
 
             if (!in_array($item->transition, ['cut', null], true)) {
@@ -241,10 +253,35 @@ class FFmpegCommandBuilder
         }
 
         if ($item->type === 'youtube') {
-            return $item->file_path_or_url;
+            return $this->resolveYoutubeUrl($item->file_path_or_url);
         }
 
         return null;
+    }
+
+    private function resolveYoutubeUrl(string $url): ?string
+    {
+        try {
+            // Extract best video+audio format under 1080p, prefer mp4
+            $cmd = "yt-dlp -f 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/best[height<=1080][ext=mp4]/best[height<=1080]' -g " . escapeshellarg($url) . " 2>/dev/null";
+            $output = trim((string) shell_exec($cmd));
+
+            if (empty($output)) {
+                return null;
+            }
+
+            // yt-dlp may return two lines (video + audio) - join with pipe for FFmpeg
+            $lines = array_filter(array_map('trim', explode("\n", $output)));
+
+            if (count($lines) === 2) {
+                // Separate video and audio streams - FFmpeg handles with -i for each
+                return implode('|', $lines);
+            }
+
+            return $lines[0];
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     private function getOverlayPosition(string $position): string
