@@ -233,7 +233,7 @@ class VodPlaylistService
     private function probeDuration(string $filePath): ?float
     {
         try {
-            $cmd = "ffprobe -v error -show_entries format=duration -of csv=p=0 \"{$filePath}\"";
+            $cmd = "ffprobe -v error -show_entries format=duration -of csv=p=0 " . escapeshellarg($filePath) . " 2>&1";
             $output = shell_exec($cmd);
             return $output ? (float) trim($output) : null;
         } catch (\Exception $e) {
@@ -248,14 +248,16 @@ class VodPlaylistService
             $thumbnailFilename = pathinfo($videoPath, PATHINFO_FILENAME) . '_thumb.jpg';
             $thumbnailPath = $thumbnailDir . '/' . $thumbnailFilename;
             $fullThumbnailPath = Storage::disk('public')->path($thumbnailPath);
-            
-            // Create thumbnail directory
-            Storage::disk('public')->makeDirectory($thumbnailDir);
-            
-            // Generate thumbnail at 10% into video
-            $cmd = "ffmpeg -i \"{$videoPath}\" -ss 00:00:03 -vframes 1 -vf \"scale=320:180\" \"{$fullThumbnailPath}\" 2>/dev/null";
+
+            if (!Storage::disk('public')->exists($thumbnailDir)) {
+                Storage::disk('public')->makeDirectory($thumbnailDir);
+            }
+
+            $escapedVideo  = escapeshellarg($videoPath);
+            $escapedOutput = escapeshellarg($fullThumbnailPath);
+            $cmd = "ffmpeg -y -i {$escapedVideo} -ss 00:00:03 -vframes 1 -vf scale=320:180 {$escapedOutput} 2>&1";
             shell_exec($cmd);
-            
+
             return file_exists($fullThumbnailPath) ? $thumbnailPath : null;
         } catch (\Exception $e) {
             Log::warning('Thumbnail generation failed: ' . $e->getMessage());
@@ -288,7 +290,7 @@ class VodPlaylistService
     private function probeDirectUrl(string $url): array
     {
         try {
-            $cmd = "ffprobe -v error -show_entries format=duration,format_name -show_entries stream=codec_name,width,height -of json \"{$url}\" 2>/dev/null";
+            $cmd = "ffprobe -v error -show_entries format=duration,format_name -show_entries stream=codec_name,width,height -of json " . escapeshellarg($url) . " 2>&1";
             $output = shell_exec($cmd);
             
             if ($output) {

@@ -26,6 +26,7 @@ const tabs = [
 
 const uploadForm = useForm({ file: null, title: '' })
 const youtubeForm = useForm({ url: '', title: '' })
+const directUrlForm = useForm({ url: '', title: '' })
 
 // Playlist settings
 const playlistSettings = useForm({
@@ -61,15 +62,33 @@ function saveEditItem(itemId) {
   })
 }
 
+const uploadProgress = ref(null)
+
 function handleUpload() {
+  uploadProgress.value = 0
   uploadForm.post(route('channel.vod.upload', { channel: props.channel.id }), {
-    onSuccess: () => uploadForm.reset()
+    onProgress: (e) => {
+      if (e?.percentage) uploadProgress.value = e.percentage
+    },
+    onSuccess: () => {
+      uploadForm.reset()
+      uploadProgress.value = null
+    },
+    onError: () => {
+      uploadProgress.value = null
+    },
   })
 }
 
 function handleYoutubeAdd() {
   youtubeForm.post(route('channel.vod.youtube', { channel: props.channel.id }), {
     onSuccess: () => youtubeForm.reset()
+  })
+}
+
+function handleDirectUrlAdd() {
+  directUrlForm.post(route('channel.vod.direct', { channel: props.channel.id }), {
+    onSuccess: () => directUrlForm.reset()
   })
 }
 
@@ -454,15 +473,37 @@ function copyToClipboard(text, label) {
             </div>
 
             <!-- Add Items Row -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
               <div class="border rounded-lg p-3">
                 <h4 class="font-medium text-gray-900 mb-2 text-sm">Upload Video</h4>
-                <form @submit.prevent="handleUpload" class="flex gap-2">
-                  <div class="flex-1">
-                    <input type="file" @input="uploadForm.file = $event.target.files[0]" accept="video/*" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
-                    <input v-model="uploadForm.title" type="text" placeholder="Title (optional)" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-xs" />
+                <form @submit.prevent="handleUpload" class="flex flex-col gap-2">
+                  <div class="flex gap-2">
+                    <div class="flex-1">
+                      <input type="file" @input="uploadForm.file = $event.target.files[0]" accept="video/*" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" />
+                      <input v-model="uploadForm.title" type="text" placeholder="Title (optional)" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-xs" />
+                    </div>
+                    <button type="submit" :disabled="!uploadForm.file || uploadForm.processing" class="shrink-0 px-3 py-1.5 bg-indigo-600 rounded-md font-semibold text-xs text-white hover:bg-indigo-700 disabled:opacity-50">Upload</button>
                   </div>
-                  <button type="submit" :disabled="!uploadForm.file || uploadForm.processing" class="shrink-0 px-3 py-1.5 bg-indigo-600 rounded-md font-semibold text-xs text-white hover:bg-indigo-700 disabled:opacity-50">Upload</button>
+                  <div v-if="uploadProgress !== null" class="w-full">
+                    <div class="flex justify-between text-xs text-gray-500 mb-0.5">
+                      <span>Uploading...</span>
+                      <span>{{ uploadProgress }}%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                      <div class="bg-indigo-600 h-2 rounded-full transition-all duration-200" :style="{ width: uploadProgress + '%' }"></div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+              <div class="border rounded-lg p-3">
+                <h4 class="font-medium text-gray-900 mb-2 text-sm">Add Video URL</h4>
+                <p class="text-xs text-gray-400 mb-2">Paste any MP4, M3U8, RTMP link from free hosts like Internet Archive, Dailymotion, etc.</p>
+                <form @submit.prevent="handleDirectUrlAdd" class="flex gap-2">
+                  <div class="flex-1">
+                    <input v-model="directUrlForm.url" type="url" placeholder="https://example.com/video.mp4" class="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-xs" />
+                    <input v-model="directUrlForm.title" type="text" placeholder="Title (optional)" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-xs" />
+                  </div>
+                  <button type="submit" :disabled="!directUrlForm.url || directUrlForm.processing" class="shrink-0 px-3 py-1.5 bg-indigo-600 rounded-md font-semibold text-xs text-white hover:bg-indigo-700 disabled:opacity-50">Add</button>
                 </form>
               </div>
               <div class="border rounded-lg p-3">
@@ -480,7 +521,7 @@ function copyToClipboard(text, label) {
             <!-- Playlist Items -->
             <div v-if="vod_items.length === 0" class="text-center py-12 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
               <p class="text-lg">No items in playlist</p>
-              <p class="text-sm">Upload videos or add YouTube links above to build your playlist.</p>
+              <p class="text-sm">Upload videos, add video URLs, or YouTube links above to build your playlist.</p>
             </div>
 
             <div v-else class="space-y-1">
@@ -492,6 +533,9 @@ function copyToClipboard(text, label) {
                     <img v-if="item.type === 'youtube' && item.metadata_json?.thumbnail"
                       :src="item.metadata_json.thumbnail"
                       class="w-24 h-14 object-cover rounded bg-gray-800" />
+                    <img v-else-if="item.metadata_json?.thumbnail"
+                      :src="'/storage/' + item.metadata_json.thumbnail"
+                      class="w-24 h-14 object-cover rounded bg-gray-800" />
                     <div v-else class="w-24 h-14 bg-gray-200 rounded flex items-center justify-center">
                       <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.069A1 1 0 0121 8.867v6.266a1 1 0 01-1.447.902L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
                     </div>
@@ -500,8 +544,8 @@ function copyToClipboard(text, label) {
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
                       <span class="px-1.5 py-0.5 text-xs rounded font-mono shrink-0"
-                        :class="item.type === 'youtube' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'">
-                        {{ item.type === 'youtube' ? 'YT' : 'FILE' }}
+                        :class="item.type === 'youtube' ? 'bg-red-100 text-red-700' : item.type === 'direct_url' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'">
+                        {{ item.type === 'youtube' ? 'YT' : item.type === 'direct_url' ? 'URL' : 'FILE' }}
                       </span>
                       <p class="text-sm font-medium text-gray-900 truncate">{{ item.title || 'Untitled' }}</p>
                     </div>
@@ -513,6 +557,12 @@ function copyToClipboard(text, label) {
                       <span v-if="item.metadata_json.resolution">&#x1F4F9; {{ item.metadata_json.resolution }}</span>
                       <span v-if="item.metadata_json.fps">{{ item.metadata_json.fps }}fps</span>
                       <a v-if="item.metadata_json.webpage_url" :href="item.metadata_json.webpage_url" target="_blank" class="text-indigo-500 hover:underline">Open &#x2197;</a>
+                    </div>
+                    <!-- Direct URL meta details -->
+                    <div v-if="item.type === 'direct_url' && item.metadata_json" class="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500">
+                      <span v-if="item.metadata_json.format">Format: {{ item.metadata_json.format }}</span>
+                      <span v-if="item.metadata_json.resolution">&#x1F4F9; {{ item.metadata_json.resolution }}</span>
+                      <span v-if="item.metadata_json.codec">Codec: {{ item.metadata_json.codec }}</span>
                     </div>
                     <!-- File/common meta -->
                     <p class="text-xs text-gray-500 mt-0.5">
