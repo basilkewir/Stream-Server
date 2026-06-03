@@ -6,17 +6,6 @@ use App\Models\Channel;
 use App\Models\VodPlaylistItem;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
-
-class VodPlaylistService
-{
-<?php
-
-namespace App\Services;
-
-use App\Models\Channel;
-use App\Models\VodPlaylistItem;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
