@@ -19,33 +19,89 @@ class StreamHealthMonitor
     public function checkChannel(Channel $channel): array
     {
         $channel->refresh();
-        $wasLive    = $channel->is_live_streaming;
-        $isAlive    = $this->flussonic->isStreamAlive($channel->stream_key);
+        $wasLive = $channel->is_live_streaming;
+        
+        // Get comprehensive stream status from Flussonic
+        $streamStats = $this->flussonic->getStreamStats($channel->stream_key);
+        $isAlive = $streamStats['alive'] ?? false;
+        $hasViewers = ($streamStats['clients'] ?? 0) > 0;
+        
+        // Add grace period to prevent flapping
+        $graceSeconds = 15; // Wait 15 seconds before switching
+        $lastCheck = $channel->last_health_check ?? now();
+        
+        $channel->update(['last_health_check' => now()]);
 
         // Live stream came back online
         if ($isAlive && !$wasLive) {
+            Log::info("Channel {$channel->id}: Live stream detected, switching from VOD to live");
             $this->switchToLive($channel);
-            return ['status' => 'live', 'action' => 'switched_to_live'];
+            return [
+                'status' => 'live', 
+                'action' => 'switched_to_live',
+                'viewers' => $streamStats['clients'] ?? 0,
+                'bitrate' => $streamStats['bitrate'] ?? 0
+            ];
         }
 
-        // Still live
+        // Still live - update metrics
         if ($isAlive && $wasLive) {
-            $channel->update(['last_live_timestamp' => now()]);
-            return ['status' => 'live', 'action' => 'already_live'];
+            $channel->update([
+                'last_live_timestamp' => now(),
+                'current_viewers' => $streamStats['clients'] ?? 0,
+                'current_bitrate' => $streamStats['bitrate'] ?? 0
+            ]);
+            return [
+                'status' => 'live', 
+                'action' => 'monitoring_live',
+                'viewers' => $streamStats['clients'] ?? 0,
+                'bitrate' => $streamStats['bitrate'] ?? 0
+            ];
         }
 
-        // Live stream just dropped
+        // Live stream just dropped - apply grace period
         if (!$isAlive && $wasLive) {
-            $this->switchToVod($channel);
-            return ['status' => 'vod', 'action' => 'switched_to_vod'];
+            $offlineSeconds = now()->diffInSeconds($channel->last_live_timestamp ?? now());
+            
+            if ($offlineSeconds >= $graceSeconds) {
+                Log::warning("Channel {$channel->id}: Live stream offline for {$offlineSeconds}s, switching to VOD failover");
+                $this->switchToVod($channel);
+                return [
+                    'status' => 'vod', 
+                    'action' => 'switched_to_vod',
+                    'offline_duration' => $offlineSeconds
+                ];
+            } else {
+                Log::info("Channel {$channel->id}: Live stream offline for {$offlineSeconds}s, waiting for grace period ({$graceSeconds}s)");
+                return [
+                    'status' => 'live', 
+                    'action' => 'grace_period',
+                    'offline_duration' => $offlineSeconds,
+                    'grace_remaining' => $graceSeconds - $offlineSeconds
+                ];
+            }
         }
 
-        // Still offline — ensure FFmpeg is still running (VOD or black screen)
+        // Still offline - ensure VOD is running and serving viewers
         if (!$isAlive && !$wasLive) {
-            if (!$this->isFfmpegRunning($channel)) {
+            $vodRunning = $this->isVodSystemRunning($channel);
+            
+            if (!$vodRunning) {
+                Log::warning("Channel {$channel->id}: VOD system not running, restarting failover");
                 $this->startVodPlayback($channel);
-                return ['status' => 'vod', 'action' => 'restarted_vod'];
+                return [
+                    'status' => 'vod', 
+                    'action' => 'restarted_vod',
+                    'viewers' => $hasViewers ? 'unknown' : 0
+                ];
             }
+            
+            return [
+                'status' => 'vod', 
+                'action' => 'monitoring_vod',
+                'viewers' => $streamStats['clients'] ?? 0,
+                'vod_active' => $vodRunning
+            ];
         }
 
         return ['status' => $wasLive ? 'live' : 'vod', 'action' => 'no_change'];
@@ -288,5 +344,17 @@ class StreamHealthMonitor
 
         $result = shell_exec("kill -0 {$pid} 2>/dev/null; echo \$?");
         return trim((string) $result) === '0';
+    }
+    
+    private function isVodSystemRunning(Channel $channel): bool
+    {
+        // Check if Flussonic is pulling VOD content
+        $streamStats = $this->flussonic->getStreamStats($channel->stream_key);
+        if ($streamStats && $streamStats['alive']) {
+            return true; // Flussonic is actively serving content
+        }
+        
+        // Fallback: Check if FFmpeg process is running
+        return $this->isFfmpegRunning($channel);
     }
 }

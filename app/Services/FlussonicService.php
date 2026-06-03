@@ -112,6 +112,23 @@ class FlussonicService
             return false;
         }
     }
+    
+    public function clearVodSource(string $name): bool
+    {
+        try {
+            // Reset stream to original ingest configuration
+            $response = Http::withBasicAuth($this->login, $this->password)
+                ->asJson()
+                ->put("{$this->baseUrl}/flussonic/api/v3/streams/{$name}", [
+                    'src' => null, // Clear VOD source to allow live input
+                ]);
+
+            return $response->successful();
+        } catch (\Exception $e) {
+            Log::error("Flussonic clear VOD source failed: {$e->getMessage()}");
+            return false;
+        }
+    }
 
     public function getServerStats(): ?array
     {
