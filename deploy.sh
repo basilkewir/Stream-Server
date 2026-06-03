@@ -31,6 +31,12 @@ fi
 
 cd "$PROJECT_DIR"
 
+# Verify this is a git repository
+if [ ! -d ".git" ]; then
+    log "❌ This is not a git repository!"
+    exit 1
+fi
+
 # Create backup directory if it doesn't exist
 sudo mkdir -p "$BACKUP_DIR"
 
@@ -55,8 +61,12 @@ cleanup() {
 trap cleanup EXIT
 
 log "📥 Pulling latest changes from GitHub..."
+# Stash any local changes first
+git stash push -m "Auto-stash before deployment $TIMESTAMP"
+# Fetch and pull the latest changes
 git fetch origin
-git reset --hard origin/main
+git checkout main
+git pull origin main
 
 log "📦 Installing/updating Composer dependencies..."
 composer install --no-dev --optimize-autoloader --no-interaction
@@ -104,6 +114,8 @@ fi
 log "📡 Checking Flussonic status..."
 if systemctl is-active --quiet flussonic; then
     log "✅ Flussonic is running"
+    log "🔄 Reloading Flussonic configuration..."
+    sudo systemctl reload flussonic
 else
     log "⚠️  Flussonic is not running, attempting to start..."
     sudo systemctl start flussonic
@@ -115,9 +127,21 @@ else
     fi
 fi
 
-# Restart stream monitoring
+# Restart stream monitoring if service exists
 log "🔄 Restarting stream monitor..."
-sudo systemctl restart hybridstream-monitor || log "⚠️  Stream monitor service not found - please set up manually"
+if systemctl is-enabled --quiet hybridstream-monitor 2>/dev/null; then
+    sudo systemctl restart hybridstream-monitor
+    log "✅ Stream monitor restarted"
+else
+    log "ℹ️  Stream monitor service not found - may need manual setup"
+fi
+
+# Trigger VOD system check for all channels
+log "🎥 Checking VOD systems for all channels..."
+php artisan stream:monitor --interval=1 2>/dev/null &
+MONITOR_PID=$!
+sleep 3
+kill $MONITOR_PID 2>/dev/null || true
 
 log "✅ Deployment completed successfully!"
 log "🔗 Your application is now updated with the latest VOD playlist fixes"
@@ -127,4 +151,12 @@ log "📊 Check the admin dashboard to verify everything is working"
 log "🧹 Cleaning up old backups..."
 sudo find "$BACKUP_DIR" -name "hybridstream_backup_*.tar.gz" -type f | sort | head -n -5 | xargs -r sudo rm
 
+# Display current git status
+log "📋 Current deployment info:"
+echo "   Branch: $(git branch --show-current)"
+echo "   Commit: $(git log --oneline -1)"
+echo "   Time: $(date)"
+
 log "🎉 Deployment finished! The server is ready."
+log "🌐 Access your application at: http://$(hostname -I | awk '{print $1}')"
+log "📺 VOD playlist functionality has been updated and improved"
