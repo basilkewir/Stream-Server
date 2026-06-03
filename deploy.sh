@@ -17,10 +17,9 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
-# Check if running as root
+# Check if running as root - allow but warn
 if [[ $EUID -eq 0 ]]; then
-   log "⚠️  This script should not be run as root. Please run as the web user (www-data) or a user with appropriate permissions."
-   exit 1
+   log "⚠️  Running as root. Consider using a dedicated deployment user for better security."
 fi
 
 # Check if project directory exists
@@ -51,7 +50,7 @@ sudo tar -czf "$BACKUP_DIR/hybridstream_backup_$TIMESTAMP.tar.gz" \
     .
 
 log "✨ Enabling maintenance mode..."
-php artisan down --message="Deploying updates..." --retry=60
+php artisan down --retry=60 2>/dev/null || php artisan down
 
 # Function to restore from maintenance mode on exit
 cleanup() {
@@ -93,7 +92,9 @@ sudo chown -R www-data:www-data storage bootstrap/cache
 sudo chmod -R 775 storage bootstrap/cache
 
 log "🔄 Restarting services..."
-sudo systemctl reload php8.1-fpm
+# Detect PHP version and restart appropriate service
+PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION;")
+sudo systemctl reload php${PHP_VERSION}-fpm 2>/dev/null || sudo systemctl reload php-fpm 2>/dev/null || log "⚠️  Could not reload PHP-FPM"
 sudo systemctl reload nginx
 
 # Install/Update yt-dlp if needed
