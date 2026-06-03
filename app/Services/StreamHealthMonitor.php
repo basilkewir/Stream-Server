@@ -6,7 +6,6 @@ use App\Models\Channel;
 use App\Models\StreamHealthLog;
 use App\Events\StreamStatusChanged;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Process;
 
 class StreamHealthMonitor
 {
@@ -17,24 +16,36 @@ class StreamHealthMonitor
 
     public function checkChannel(Channel $channel): array
     {
-        $streamKey = $channel->stream_key;
-        $wasLive = $channel->is_live_streaming;
+        $channel->refresh();
+        $wasLive    = $channel->is_live_streaming;
+        $isAlive    = $this->flussonic->isStreamAlive($channel->stream_key);
 
-        $isAlive = $this->flussonic->isStreamAlive($streamKey);
-
+        // Live stream came back online
         if ($isAlive && !$wasLive) {
             $this->switchToLive($channel);
             return ['status' => 'live', 'action' => 'switched_to_live'];
         }
 
+        // Still live
         if ($isAlive && $wasLive) {
             $channel->update(['last_live_timestamp' => now()]);
             return ['status' => 'live', 'action' => 'already_live'];
         }
 
+        // Live stream just dropped
         if (!$isAlive && $wasLive) {
             $this->switchToVod($channel);
             return ['status' => 'vod', 'action' => 'switched_to_vod'];
+        }
+
+        // Still offline — ensure FFmpeg is running as failover
+        if (!$isAlive && !$wasLive) {
+            $hasVod = $channel->vodPlaylistItems()->where('status', 'active')->exists();
+
+            if ($hasVod && !$this->isFfmpegRunning($channel)) {
+                $this->startVodPlayback($channel);
+                return ['status' => 'vod', 'action' => 'restarted_vod'];
+            }
         }
 
         return ['status' => $wasLive ? 'live' : 'vod', 'action' => 'no_change'];
@@ -42,7 +53,7 @@ class StreamHealthMonitor
 
     public function checkAllChannels(): array
     {
-        $results = [];
+        $results  = [];
         $channels = Channel::with(['overlaySetting', 'vodPlaylistItems'])
             ->whereNotNull('ingest_port')
             ->get();
@@ -64,74 +75,100 @@ class StreamHealthMonitor
         $this->stopVodProcess($channel);
 
         $channel->update([
-            'is_live_streaming' => true,
-            'failover_active' => false,
+            'is_live_streaming'   => true,
+            'failover_active'     => false,
             'last_live_timestamp' => now(),
             'failover_ffmpeg_pid' => null,
         ]);
 
         StreamHealthLog::create([
-            'channel_id' => $channel->id,
-            'is_live' => true,
+            'channel_id'      => $channel->id,
+            'is_live'         => true,
             'switched_back_at' => now(),
-            'event_type' => 'live_restored',
-            'message' => "Live stream restored for channel {$channel->name}",
+            'event_type'      => 'live_restored',
+            'message'         => "Live stream restored for channel {$channel->name}",
         ]);
 
         event(new StreamStatusChanged($channel, true, false, 'live_restored'));
-
-        Log::info("Switched channel {$channel->id} back to live stream");
+        Log::info("Channel {$channel->id} switched back to live");
     }
 
     public function switchToVod(Channel $channel): void
     {
         $channel->update([
             'is_live_streaming' => false,
-            'failover_active' => true,
+            'failover_active'   => true,
         ]);
 
         StreamHealthLog::create([
-            'channel_id' => $channel->id,
-            'is_live' => false,
+            'channel_id'        => $channel->id,
+            'is_live'           => false,
             'switched_to_vod_at' => now(),
-            'event_type' => 'vod_failover',
-            'message' => "Live stream lost for channel {$channel->name}, switching to VOD failover",
+            'event_type'        => 'vod_failover',
+            'message'           => "Live stream lost for channel {$channel->name}, switching to VOD failover",
         ]);
 
-        $this->startVodPlayback($channel);
+        $hasVod = $channel->vodPlaylistItems()->where('status', 'active')->exists();
+        if ($hasVod) {
+            $this->startVodPlayback($channel);
+        }
 
         event(new StreamStatusChanged($channel, false, true, 'vod_failover'));
-
-        Log::info("Switched channel {$channel->id} to VOD failover");
+        Log::info("Channel {$channel->id} switched to VOD failover");
     }
 
     private function startVodPlayback(Channel $channel): void
     {
+        // Reload with relations needed for FFmpeg command
+        $channel->load(['overlaySetting', 'vodPlaylistItems']);
+
         $cmd = $this->ffmpeg->buildVodWithOverlayCommand($channel);
 
-        try {
-            $process = Process::start($cmd);
-            $pid = $process->id();
-            $channel->update(['failover_ffmpeg_pid' => (string) $pid]);
-            Log::info("Started VOD playback for channel {$channel->id}, PID: {$pid}");
-        } catch (\Exception $e) {
-            Log::error("Failed to start VOD playback for channel {$channel->id}: {$e->getMessage()}");
+        if (empty($cmd)) {
+            Log::error("Empty FFmpeg command for channel {$channel->id}");
+            return;
+        }
+
+        // Write command to a temp script so nohup can run it cleanly
+        $scriptPath = "/tmp/ffmpeg_channel_{$channel->id}.sh";
+        $logPath    = "/var/log/ffmpeg_channel_{$channel->id}.log";
+
+        file_put_contents($scriptPath, "#!/bin/bash\n{$cmd}\n");
+        chmod($scriptPath, 0755);
+
+        // Launch detached from PHP process entirely
+        $fullCmd = "nohup bash {$scriptPath} > {$logPath} 2>&1 & echo \$!";
+        $pid     = trim((string) shell_exec($fullCmd));
+
+        if ($pid && is_numeric($pid)) {
+            $channel->update(['failover_ffmpeg_pid' => $pid]);
+            Log::info("Started VOD FFmpeg for channel {$channel->id}, PID: {$pid}");
+        } else {
+            Log::error("Failed to start VOD FFmpeg for channel {$channel->id}");
         }
     }
 
     private function stopVodProcess(Channel $channel): void
     {
-        if ($channel->failover_ffmpeg_pid) {
-            try {
-                if (PHP_OS_FAMILY === 'Windows') {
-                    Process::run("taskkill /F /PID {$channel->failover_ffmpeg_pid}");
-                } else {
-                    Process::run("kill -9 {$channel->failover_ffmpeg_pid}");
-                }
-                Log::info("Stopped VOD FFmpeg process PID: {$channel->failover_ffmpeg_pid}");
-            } catch (\Exception $e) {
-                Log::warning("Failed to stop VOD process: {$e->getMessage()}");
-            }
-        }
+        $pid = $channel->failover_ffmpeg_pid;
+        if (!$pid) return;
+
+        // Kill the FFmpeg process and any children
+        shell_exec("kill -9 {$pid} 2>/dev/null");
+        shell_exec("pkill -P {$pid} 2>/dev/null");
+
+        // Clean up script file
+        @unlink("/tmp/ffmpeg_channel_{$channel->id}.sh");
+
+        Log::info("Stopped VOD FFmpeg PID {$pid} for channel {$channel->id}");
+    }
+
+    private function isFfmpegRunning(Channel $channel): bool
+    {
+        $pid = $channel->failover_ffmpeg_pid;
+        if (!$pid) return false;
+
+        $result = shell_exec("kill -0 {$pid} 2>/dev/null; echo \$?");
+        return trim((string) $result) === '0';
     }
 }
