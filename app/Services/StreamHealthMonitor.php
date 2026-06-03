@@ -72,6 +72,9 @@ class StreamHealthMonitor
     {
         $this->stopVodProcess($channel);
 
+        // Reset Flussonic stream src if it was set to a YouTube URL during failover
+        $this->flussonic->restartStream($channel->stream_key);
+
         $channel->update([
             'is_live_streaming'   => true,
             'failover_active'     => false,
@@ -125,6 +128,13 @@ class StreamHealthMonitor
             return;
         }
 
+        // If FFmpeg fell back to black screen but we have YouTube items,
+        // try Flussonic pulling the YouTube URL directly as last resort.
+        if (str_contains($cmd, 'color=c=black') && $this->tryFlussonicYoutubeFallback($channel)) {
+            Log::info("Channel {$channel->id} using Flussonic YouTube fallback instead of black screen.");
+            return;
+        }
+
         // Write command to a temp script so nohup can run it cleanly
         $scriptPath = storage_path("ffmpeg/channel_{$channel->id}.sh");
         $logPath    = storage_path("ffmpeg/channel_{$channel->id}.log");
@@ -142,6 +152,42 @@ class StreamHealthMonitor
         } else {
             Log::error("Failed to start VOD FFmpeg for channel {$channel->id}");
         }
+    }
+
+    private function tryFlussonicYoutubeFallback(Channel $channel): bool
+    {
+        // If Flussonic is already pulling content (stream is alive), don't restart
+        if ($this->flussonic->isStreamAlive($channel->stream_key)) {
+            return true;
+        }
+
+        $youtubeItems = $channel->vodPlaylistItems
+            ->where('type', 'youtube')
+            ->where('status', 'active')
+            ->sortBy('order');
+
+        if ($youtubeItems->isEmpty()) {
+            return false;
+        }
+
+        $firstItem = $youtubeItems->first();
+
+        $success = $this->flussonic->pushVodToStream(
+            $channel->stream_key,
+            $firstItem->file_path_or_url
+        );
+
+        if ($success) {
+            $channel->update([
+                'failover_active' => true,
+                'failover_ffmpeg_pid' => null,
+            ]);
+            Log::info("Channel {$channel->id}: Flussonic pulling YouTube URL: {$firstItem->file_path_or_url}");
+        } else {
+            Log::error("Channel {$channel->id}: Flussonic YouTube fallback also failed.");
+        }
+
+        return $success;
     }
 
     private function stopVodProcess(Channel $channel): void

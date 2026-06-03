@@ -286,37 +286,66 @@ class YouTubeService
 
     private function enhancedFallbackMetadata(string $videoId, string $url): array
     {
+        $title      = 'YouTube Video';
+        $channel    = null;
+        $thumbnail  = "https://img.youtube.com/vi/{$videoId}/mqdefault.jpg";
+        $duration   = 0;
+
         // Try YouTube oEmbed API for basic metadata
         try {
             $oembedUrl = 'https://www.youtube.com/oembed?url=' . urlencode($url) . '&format=json';
-            $oembedData = @file_get_contents($oembedUrl);
-            
+            $oembedCtx = stream_context_create(['http' => ['timeout' => 5]]);
+            $oembedData = @file_get_contents($oembedUrl, false, $oembedCtx);
+
             if ($oembedData) {
                 $oembed = json_decode($oembedData, true);
                 if ($oembed && isset($oembed['title'])) {
-                    return [
-                        'video_id'      => $videoId,
-                        'title'         => $oembed['title'],
-                        'channel'       => $oembed['author_name'] ?? null,
-                        'duration_sec'  => 180, // Default 3 minutes when unknown
-                        'thumbnail'     => $oembed['thumbnail_url'] ?? "https://img.youtube.com/vi/{$videoId}/mqdefault.jpg",
-                        'webpage_url'   => $url,
-                        'description'   => 'YouTube video metadata could not be fully retrieved. Duration estimated at 3 minutes.',
-                    ];
+                    $title     = $oembed['title'];
+                    $channel   = $oembed['author_name'] ?? null;
+                    $thumbnail = $oembed['thumbnail_url'] ?? $thumbnail;
                 }
             }
         } catch (\Exception $e) {
-            // Continue to basic fallback
+            // Continue
         }
 
-        // Basic fallback when all else fails
+        // Try scraping the YouTube page for real duration
+        try {
+            $pageCtx = stream_context_create([
+                'http' => [
+                    'timeout' => 8,
+                    'header'  => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36\r\n",
+                ],
+            ]);
+            $html = @file_get_contents($url, false, $pageCtx);
+
+            if ($html) {
+                // Extract from ytInitialPlayerResponse JSON blob
+                if (preg_match('/"lengthSeconds"\s*:\s*"?(\d+)"?/', $html, $m)) {
+                    $duration = (int) $m[1];
+                }
+
+                // Also try to get title if oEmbed didn't work
+                if ($title === 'YouTube Video' && preg_match('/<title>(.+?)\s*-\s*YouTube<\/title>/', $html, $tm)) {
+                    $title = html_entity_decode(trim($tm[1]), ENT_QUOTES, 'UTF-8');
+                }
+            }
+        } catch (\Exception $e) {
+            // Continue
+        }
+
+        $effectiveDuration = $duration > 0 ? $duration : 180;
+
         return [
             'video_id'      => $videoId,
-            'title'         => 'YouTube Video',
-            'duration_sec'  => 180, // Default 3 minutes
-            'thumbnail'     => "https://img.youtube.com/vi/{$videoId}/mqdefault.jpg",
+            'title'         => $title,
+            'channel'       => $channel,
+            'duration_sec'  => $effectiveDuration,
+            'thumbnail'     => $thumbnail,
             'webpage_url'   => $url,
-            'description'   => 'YouTube video metadata unavailable. Please install yt-dlp for full metadata extraction.',
+            'description'   => $duration > 0
+                ? 'YouTube metadata retrieved via page scraping.'
+                : 'YouTube video metadata unavailable. Please install yt-dlp for full metadata extraction.',
         ];
     }
 }
