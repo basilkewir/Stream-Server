@@ -339,11 +339,52 @@ function copyToClipboard(text, label) {
 
           <!-- Ingest Tab -->
           <div class="p-6" v-if="activeTab === 'ingest'">
-            <h3 class="text-lg font-semibold text-gray-900 mb-6">Ingest Settings</h3>
-            <form @submit.prevent="handleChannelUpdate" class="space-y-6 max-w-lg">
-              <div><label class="block text-sm font-medium text-gray-700">Channel Name</label><input v-model="channelForm.name" type="text" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" /></div>
-              <div><label class="block text-sm font-medium text-gray-700">Ingest Protocol</label><select v-model="channelForm.ingest_protocol" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"><option v-for="p in ingestProtocols" :key="p" :value="p">{{ p.toUpperCase() }}</option></select></div>
-              <button type="submit" class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700">Save Settings</button>
+            <h3 class="text-lg font-semibold text-gray-900 mb-6">Channel Settings</h3>
+            <form @submit.prevent="handleChannelUpdate" class="space-y-5 max-w-lg">
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Channel Name</label>
+                <input v-model="channelForm.name" type="text" required
+                  class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" />
+                <p v-if="channelForm.errors.name" class="mt-1 text-xs text-red-600">{{ channelForm.errors.name }}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Ingest Protocol</label>
+                <select v-model="channelForm.ingest_protocol"
+                  class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                  <option v-for="p in ingestProtocols" :key="p" :value="p">{{ p.toUpperCase() }}</option>
+                </select>
+                <p class="mt-1 text-xs text-gray-500">Changing protocol will reassign the ingest port automatically.</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Stream Key</label>
+                <div class="mt-1 flex gap-2">
+                  <input :value="channel.stream_key" readonly
+                    class="block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 font-mono text-sm text-gray-600" />
+                  <button type="button" @click="copyToClipboard(channel.stream_key, 'key_ingest')"
+                    class="shrink-0 px-3 py-2 border border-gray-300 rounded-md text-xs text-gray-600 hover:bg-gray-50">
+                    {{ copied === 'key_ingest' ? 'Copied!' : 'Copy' }}
+                  </button>
+                </div>
+                <p class="mt-1 text-xs text-gray-500">Stream key is auto-generated and cannot be changed.</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700">Ingest URL</label>
+                <div class="mt-1 flex gap-2">
+                  <input :value="ingestUrl" readonly
+                    class="block w-full border-gray-300 rounded-md shadow-sm bg-gray-50 font-mono text-sm text-gray-600" />
+                  <button type="button" @click="copyToClipboard(ingestUrl, 'url_ingest')"
+                    class="shrink-0 px-3 py-2 border border-gray-300 rounded-md text-xs text-gray-600 hover:bg-gray-50">
+                    {{ copied === 'url_ingest' ? 'Copied!' : 'Copy' }}
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center gap-3 pt-2">
+                <button type="submit" :disabled="channelForm.processing"
+                  class="inline-flex items-center px-4 py-2 bg-indigo-600 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-indigo-700 disabled:opacity-50">
+                  {{ channelForm.processing ? 'Saving...' : 'Save Changes' }}
+                </button>
+                <span v-if="channelForm.wasSuccessful" class="text-sm text-green-600">Saved!</span>
+              </div>
             </form>
           </div>
 
